@@ -115,6 +115,15 @@ export interface Snapshot {
   audit: Audit[];
   storage: 'local' | 'blob';
   settings?: SchoolSettings;
+  drive?: {
+    enabled: boolean;
+    folderId: string;
+    folderName: string;
+    ownerEmail?: string;
+    url?: string;
+    remaining?: Array<{ id: string; name: string }>;
+    stored?: number;
+  };
 }
 export interface SchoolSettings {
   schoolLogo?: string;

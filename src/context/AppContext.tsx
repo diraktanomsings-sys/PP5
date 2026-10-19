@@ -354,6 +354,7 @@ function useServerApp() {
     refresh,
     action,
     mutate,
+    driveStorage: snapshot?.drive,
     verifyCredentials,
     logout,
     selectRole,

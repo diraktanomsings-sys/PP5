@@ -1,0 +1,301 @@
+import { Readable } from 'node:stream';
+import { digest, opaqueToken, requireThat, ApiError } from './security.js';
+import type { Store, StoredFile } from './store.js';
+import type { ObjectStorage } from './storage.js';
+import type { Service } from './service.js';
+
+export interface DriveConfig {
+  url: string;
+  folderId: string;
+  enabled: boolean;
+  folderName: string;
+  ownerEmail: string;
+  verifiedAt: string;
+}
+export interface DriveJob {
+  kind: 'probe' | 'write' | 'read';
+  folderId: string;
+  fileId?: string;
+  driveId?: string;
+  size?: number;
+  sha256?: string;
+  expiresAt: number;
+}
+const idPattern = /^[A-Za-z0-9_-]{1,200}$/;
+export function bridgeUrl(value: unknown) {
+  let url: URL;
+  try {
+    url = new URL(String(value));
+  } catch {
+    throw new ApiError(400, 'URL ตัวรับไฟล์ไม่ถูกต้อง');
+  }
+  requireThat(
+    url.origin === 'https://script.google.com' &&
+      /^\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url.pathname) &&
+      !url.search &&
+      !url.hash &&
+      !url.username &&
+      !url.password,
+    400,
+    'ใช้ URL เว็บแอป Apps Script ที่ลงท้าย /exec เท่านั้น',
+  );
+  return url.toString();
+}
+export class DriveBridge {
+  constructor(
+    public store: Store,
+    private source: ObjectStorage,
+    private transport: typeof fetch = fetch,
+  ) {}
+  async payload(key: unknown) {
+    requireThat(
+      typeof key === 'string' && /^[a-f0-9]{64}$/.test(key),
+      403,
+      'คำขอรับส่งไฟล์ไม่ถูกต้อง',
+    );
+    const job = await this.store.write((s) => {
+      const hash = digest(key),
+        job = s.driveJobs?.[hash];
+      requireThat(job && job.expiresAt > Date.now(), 403, 'คำขอหมดอายุหรือถูกใช้แล้ว');
+      delete s.driveJobs![hash];
+      return job;
+    });
+    const info = { protocol: 'PP5-DRIVE-1', kind: job.kind, folderId: job.folderId };
+    if (job.kind === 'probe') return info;
+    const f = (await this.store.read()).files[job.fileId!];
+    requireThat(f && f.size === job.size, 409, 'รายการไฟล์เปลี่ยนแปลง');
+    const file = {
+      id: f.id,
+      name: f.name,
+      kind: f.kind,
+      size: job.size,
+      sha256: job.sha256,
+      driveId: job.driveId,
+    };
+    if (job.kind === 'read') return { ...info, file };
+    const bytes = await this.source.bytes(f);
+    requireThat(
+      bytes.length === job.size && digest(bytes) === job.sha256,
+      409,
+      'ไฟล์ต้นทางเปลี่ยนแปลง',
+    );
+    return { ...info, file, base64: Buffer.from(bytes).toString('base64') };
+  }
+  private async invoke(
+    config: Pick<DriveConfig, 'url' | 'folderId'>,
+    job: Omit<DriveJob, 'expiresAt' | 'folderId'>,
+  ) {
+    const key = opaqueToken(),
+      hash = digest(key);
+    await this.store.write((s) => {
+      s.driveJobs ||= {};
+      for (const [k, v] of Object.entries(s.driveJobs))
+        if (v.expiresAt <= Date.now()) delete s.driveJobs[k];
+      requireThat(
+        Object.keys(s.driveJobs).length < 40,
+        429,
+        'มีไฟล์กำลังรับส่งหลายรายการ กรุณาลองใหม่',
+      );
+      s.driveJobs[hash] = { ...job, folderId: config.folderId, expiresAt: Date.now() + 180_000 };
+    });
+    try {
+      let response = await this.transport(bridgeUrl(config.url), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key }),
+        redirect: 'manual',
+        signal: AbortSignal.timeout(50_000),
+      });
+      if ([301, 302, 303].includes(response.status)) {
+        const location = response.headers.get('location');
+        requireThat(location, 502, 'ตัวรับไฟล์ไม่ตอบกลับ');
+        const redirect = new URL(location);
+        requireThat(
+          redirect.origin === 'https://script.googleusercontent.com' &&
+            !redirect.username &&
+            !redirect.password,
+          502,
+          'ตัวรับไฟล์ยังไม่เปิดให้ PP5 เชื่อมต่อ กรุณาตรวจการเผยแพร่',
+        );
+        response = await this.transport(redirect, {
+          redirect: 'error',
+          signal: AbortSignal.timeout(50_000),
+        });
+      }
+      requireThat(
+        response.ok && response.headers.get('content-type')?.includes('application/json'),
+        502,
+        'ตัวรับไฟล์ Google Drive ยังไม่พร้อมใช้งาน',
+      );
+      requireThat(response.body, 502, 'Google Drive ไม่ส่งข้อมูลกลับ');
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      const reader = response.body.getReader();
+      try {
+        while (true) {
+          const part = await reader.read();
+          if (part.done) break;
+          size += part.value.length;
+          requireThat(size <= 36 * 1024 * 1024, 502, 'ข้อมูลตอบกลับ Drive เกินกำหนด');
+          chunks.push(part.value);
+        }
+      } finally {
+        await reader.cancel();
+      }
+      let result: any;
+      try {
+        result = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      } catch {
+        throw new ApiError(502, 'ข้อมูลตอบกลับ Drive ไม่ถูกต้อง');
+      }
+      requireThat(result?.protocol === 'PP5-DRIVE-1', 502, 'รุ่นตัวรับไฟล์ Drive ไม่ถูกต้อง');
+      const errors: Record<string, string> = {
+        PRIVATE_FOLDER: 'โฟลเดอร์ Drive ต้องตั้งการเข้าถึงทั่วไปเป็นแบบจำกัด',
+        ACCESS: 'บัญชีตัวรับไฟล์ไม่มีสิทธิ์ในโฟลเดอร์โรงเรียน',
+        CHANGED: 'ไฟล์ใน Drive เปลี่ยนแปลงจากฉบับที่ส่ง',
+        QUOTA: 'พื้นที่หรือโควตา Google Drive ไม่เพียงพอ กรุณาติดต่อผู้ดูแล',
+      };
+      requireThat(
+        result.ok === true,
+        409,
+        errors[result.error] || 'รับส่งไฟล์กับ Google Drive ไม่สำเร็จ ยังไม่ได้ยืนยันบันทึก',
+      );
+      requireThat(
+        result.folderId === config.folderId && result.private === true,
+        409,
+        'โฟลเดอร์ Drive ปลายทางไม่ตรงหรือเปิดเผยเป็นสาธารณะ',
+      );
+      return result;
+    } catch (e) {
+      if (e instanceof ApiError) throw e;
+      throw new ApiError(502, 'ติดต่อ Google Drive ไม่สำเร็จ กรุณาลองใหม่');
+    } finally {
+      await this.store.write((s) => {
+        if (s.driveJobs) delete s.driveJobs[hash];
+      });
+    }
+  }
+  async configure(service: Service, token: string, role: any, body: any) {
+    service.actor(await this.store.read(), token, role, ['ADMIN']);
+    const url = bridgeUrl(body.url),
+      folderId = String(body.folderId || '');
+    requireThat(idPattern.test(folderId), 400, 'รหัสโฟลเดอร์ไม่ถูกต้อง');
+    requireThat(body.confirmed === true, 400, 'กรุณายืนยันใช้พื้นที่ของโรงเรียนเป็นที่เก็บไฟล์');
+    const before = await this.store.read();
+    requireThat(
+      !Object.values(before.files).some((f) => f.drive && f.drive.folderId !== folderId),
+      409,
+      'มีไฟล์อยู่ใน Drive เดิมแล้ว กรุณาย้ายข้อมูลอย่างเป็นระบบก่อนเปลี่ยนโฟลเดอร์',
+    );
+    const result = await this.invoke({ url, folderId }, { kind: 'probe' });
+    requireThat(result.verified === true, 409, 'ตัวรับไฟล์ยังไม่ผ่านการทดสอบบันทึกและเปิดอ่าน');
+    await this.store.write((s) => {
+      const admin = service.actor(s, token, role, ['ADMIN']);
+      requireThat(
+        !Object.values(s.files).some((f) => f.drive && f.drive.folderId !== folderId),
+        409,
+        'โฟลเดอร์เปลี่ยนแปลงแล้ว',
+      );
+      s.driveConfig = {
+        url,
+        folderId,
+        enabled: true,
+        folderName: String(result.name || 'ปพ.5').slice(0, 200),
+        ownerEmail: String(result.ownerEmail || '').slice(0, 200),
+        verifiedAt: new Date().toISOString(),
+      };
+      s.settings ||= {};
+      s.settings.organizationDriveUrl = `https://drive.google.com/drive/folders/${folderId}`;
+      service.log(s, admin, 'DRIVE_CONNECTED', folderId, { folderName: s.driveConfig.folderName });
+    });
+  }
+  async persist(file: StoredFile, bytes: Uint8Array): Promise<StoredFile['drive']> {
+    if (file.drive) return file.drive;
+    const config = (await this.store.read()).driveConfig;
+    if (!config?.enabled) return undefined;
+    requireThat(
+      file.size === bytes.length && file.sha256 === digest(bytes),
+      409,
+      'ข้อมูลไฟล์ไม่ตรงกับต้นฉบับ',
+    );
+    const r = await this.invoke(config, {
+      kind: 'write',
+      fileId: file.id,
+      size: file.size,
+      sha256: file.sha256,
+    });
+    requireThat(
+      idPattern.test(String(r.id)) && r.sha256 === file.sha256 && r.size === file.size,
+      409,
+      'ไฟล์ Drive ไม่ตรงกับต้นฉบับ',
+    );
+    return {
+      id: r.id,
+      folderId: config.folderId,
+      webViewLink: `https://drive.google.com/file/d/${r.id}/view`,
+      copiedAt: new Date().toISOString(),
+    };
+  }
+  async bytes(file: StoredFile) {
+    if (!file.drive) return this.source.bytes(file);
+    const config = (await this.store.read()).driveConfig;
+    requireThat(
+      config && config.folderId === file.drive.folderId,
+      503,
+      'กรุณาเชื่อมตัวรับไฟล์ Drive ของโรงเรียน',
+    );
+    const r = await this.invoke(config, {
+      kind: 'read',
+      fileId: file.id,
+      driveId: file.drive.id,
+      size: file.size,
+      sha256: file.sha256,
+    });
+    requireThat(
+      typeof r.base64 === 'string' && r.base64.length <= Math.ceil(file.size / 3) * 4,
+      409,
+      'ขนาดข้อมูล Drive ไม่ตรงกัน',
+    );
+    const bytes = Buffer.from(r.base64, 'base64');
+    requireThat(
+      bytes.length === file.size && digest(bytes) === file.sha256,
+      409,
+      'ไฟล์ใน Drive เปลี่ยนแปลงจากต้นฉบับ',
+    );
+    return bytes;
+  }
+  async migrate(service: Service, token: string, role: any, fileId: string) {
+    const s = await this.store.read(),
+      user = service.actor(s, token, role, ['ADMIN']);
+    const f = s.files[fileId];
+    requireThat(f?.ready && f.used, 404, 'ไม่พบไฟล์ที่ส่งแล้ว');
+    requireThat(s.driveConfig?.enabled, 409, 'เชื่อม Drive ก่อนย้ายไฟล์');
+    if (f.drive) return;
+    const bytes = await this.source.bytes(f),
+      drive = await this.persist(f, bytes);
+    requireThat(drive, 409, 'Drive ยังไม่พร้อม');
+    await this.store.write((s) => {
+      service.actor(s, token, role, ['ADMIN']);
+      requireThat(s.files[f.id]?.sha256 === f.sha256, 409, 'ไฟล์เปลี่ยนแปลง');
+      s.files[f.id].drive = drive;
+      service.log(s, user, 'FILE_COPIED_TO_DRIVE', f.id, { sha256: f.sha256 });
+    });
+    // Keep the previous originals when migrating existing submitted documents.
+  }
+  storage(): ObjectStorage {
+    return {
+      kind: this.source.kind,
+      write: this.source.write,
+      bytes: (f) => this.bytes(f),
+      read: async (f) => (f.drive ? Readable.from([await this.bytes(f)]) : this.source.read(f)),
+      persist: (f, b) => this.persist(f, b),
+      release: async (f) => {
+        if (!f.drive || f.used || f.sourceReleased || !this.source.remove) return;
+        await this.source.remove(f);
+        await this.store.write((s) => {
+          if (s.files[f.id]?.drive?.id === f.drive!.id) s.files[f.id].sourceReleased = true;
+        });
+      },
+    };
+  }
+}

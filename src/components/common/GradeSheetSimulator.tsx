@@ -25,8 +25,15 @@ export function GradeSheetSimulator({
   submission: PP5Submission;
   course: Course;
 }) {
-  const { currentUser, currentRole, organizationDriveUrl, download, downloadSigned, mutate } =
-    useApp();
+  const {
+    currentUser,
+    currentRole,
+    organizationDriveUrl,
+    download,
+    downloadSigned,
+    mutate,
+    driveStorage,
+  } = useApp();
   const [tab, setTab] = useState<string>('pdf');
   const [versionIndex, setVersionIndex] = useState(0);
   const [sheets, setSheets] = useState<Sheet[]>([]);
@@ -327,8 +334,9 @@ export function GradeSheetSimulator({
               </p>
             )}
             <p className="text-xs text-slate-500">
-              ไฟล์ที่ส่งผ่านระบบเก็บในพื้นที่ส่วนตัวของ PP5 การตั้งลิงก์นี้ไม่ได้คัดลอกไฟล์ไปยัง
-              Google Drive อัตโนมัติ
+              {driveStorage?.enabled
+                ? 'เปิดเก็บไฟล์ใหม่ใน Google Drive แล้ว ไฟล์ที่ส่งก่อนเชื่อมต่อจะย้ายเมื่อผู้ดูแลสั่งคัดลอก ส่วนการดูไฟล์ใน PP5 ยังตรวจสิทธิ์ตามบทบาท'
+                : 'ยังไม่ได้เปิดเก็บไฟล์ใน Drive ลิงก์โฟลเดอร์อย่างเดียวไม่ทำให้ไฟล์ถูกคัดลอกอัตโนมัติ'}
             </p>
           </div>
         )}
