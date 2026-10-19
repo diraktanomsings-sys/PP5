@@ -44,23 +44,24 @@ export const ReviewerVerifyView: React.FC = () => {
   const currentVer = submission?.versions[0];
 
   // 4 Checklist state
-  const [ratioOk, setRatioOk] = useState(true);
-  const [attendanceOk, setAttendanceOk] = useState(true);
-  const [traitsOk, setTraitsOk] = useState(true);
-  const [readingOk, setReadingOk] = useState(true);
+  const [ratioOk, setRatioOk] = useState(false);
+  const [attendanceOk, setAttendanceOk] = useState(false);
+  const [traitsOk, setTraitsOk] = useState(false);
+  const [readingOk, setReadingOk] = useState(false);
 
   // Reviewer Remarks when passing
   const [reviewerCommendation, setReviewerCommendation] = useState(
-    'ตรวจสอบความถูกต้องจากไฟล์ต้นฉบับบน Google Drive องค์กรและระบบเรียบร้อยแล้ว ถูกต้องตามเกณฑ์หลักสูตร 4 ด้านครบถ้วน 100%'
+    'ตรวจสอบไฟล์ต้นฉบับตามเกณฑ์ทั้ง 4 ด้านแล้ว',
   );
 
   // Rejection modal state
   const [showRejectModal, setShowRejectModal] = useState(false);
-  const [rejectReason, setRejectReason] = useState(
-    '1. ตรวจพบสูตรคะแนนเก็บในชีตที่ 2 ไม่ครบถ้วน\n2. คุณลักษณะอันพึงประสงค์ข้อ 4 ยังไม่ได้ระบุผลการประเมิน 2 คน'
-  );
+  const [rejectReason, setRejectReason] = useState('');
+  const [annotatedFile, setAnnotatedFile] = useState<File | null>(null);
   const [annotatedFileName, setAnnotatedFileName] = useState(
-    course ? `คอมเมนต์ตรวจ_ปพ5_${course.course_code}_${currentVer?.version_number}_highlighted.pdf` : ''
+    course
+      ? `คอมเมนต์ตรวจ_ปพ5_${course.course_code}_${currentVer?.version_number}_highlighted.pdf`
+      : '',
   );
 
   const [reviewSuccessMsg, setReviewSuccessMsg] = useState<string | null>(null);
@@ -84,33 +85,34 @@ export const ReviewerVerifyView: React.FC = () => {
     setReadingOk(status);
   };
 
-  const handlePassReview = () => {
-    reviewSubmission(
-      submission.id,
-      'PASS',
-      reviewerCommendation || 'ตรวจสอบความถูกต้องตามเกณฑ์หลักสูตร 4 ด้านครบถ้วน 100% รับรองส่งต่อผู้บริหารลงนาม',
-      { ratio: ratioOk, attendance: attendanceOk, traits: traitsOk, reading: readingOk }
-    );
-    setReviewSuccessMsg('รับรองเอกสารผ่านเรียบร้อยแล้ว! ส่งต่อผู้อำนวยการอนุมัติ');
-    setTimeout(() => {
-      setActiveView('reviewer/dashboard');
-    }, 1200);
+  const handlePassReview = async () => {
+    if (
+      !(await reviewSubmission(
+        submission.id,
+        true,
+        [ratioOk, attendanceOk, traitsOk, readingOk],
+        reviewerCommendation || 'ตรวจไฟล์ต้นฉบับครบทั้ง 4 ด้านแล้ว',
+      ))
+    )
+      return;
+    setReviewSuccessMsg('รับรองเอกสารและบันทึกผลตรวจเรียบร้อยแล้ว');
+    setActiveView('reviewer/dashboard');
   };
 
-  const handleConfirmReject = (e: React.FormEvent) => {
+  const handleConfirmReject = async (e: React.FormEvent) => {
     e.preventDefault();
-    reviewSubmission(
-      submission.id,
-      'REJECT',
-      rejectReason,
-      { ratio: ratioOk, attendance: attendanceOk, traits: traitsOk, reading: readingOk },
-      annotatedFileName
-    );
+    if (
+      !(await reviewSubmission(
+        submission.id,
+        false,
+        [ratioOk, attendanceOk, traitsOk, readingOk],
+        rejectReason,
+        annotatedFile || undefined,
+      ))
+    )
+      return;
     setShowRejectModal(false);
-    setReviewSuccessMsg('ส่งกลับแก้ไขเรียบร้อยแล้ว! แจ้งเตือนครูผู้สอนให้ส่งเวอร์ชันใหม่');
-    setTimeout(() => {
-      setActiveView('reviewer/dashboard');
-    }, 1200);
+    setActiveView('reviewer/dashboard');
   };
 
   return (
@@ -156,14 +158,17 @@ export const ReviewerVerifyView: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              ครูผู้สอน: <span className="font-semibold text-slate-800">{teacher?.full_name}</span> ({teacher?.department})
+              ครูผู้สอน: <span className="font-semibold text-slate-800">{teacher?.full_name}</span>{' '}
+              ({teacher?.department})
             </p>
           </div>
 
           <div className="text-right text-xs">
             <span className="text-slate-400 block text-[11px]">เวลาที่ส่งเอกสาร:</span>
             <span className="font-semibold text-slate-700 font-mono">
-              {currentVer?.submitted_at ? new Date(currentVer.submitted_at).toLocaleString('th-TH') : '-'}
+              {currentVer?.submitted_at
+                ? new Date(currentVer.submitted_at).toLocaleString('th-TH')
+                : '-'}
             </span>
           </div>
         </div>
@@ -173,7 +178,9 @@ export const ReviewerVerifyView: React.FC = () => {
           <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
             <div>
-              <span className="font-bold">เอกสารนี้ได้รับการแก้ไขมาจากรอบก่อนหน้า ({submission.versions[1].version_number}):</span>
+              <span className="font-bold">
+                เอกสารนี้ได้รับการแก้ไขมาจากรอบก่อนหน้า ({submission.versions[1].version_number}):
+              </span>
               <p className="text-[11px] text-amber-800 mt-0.5">
                 ข้อบกพร่องเดิมที่ตรวจพบ: "{submission.versions[1].reviewer_notes}"
               </p>
@@ -249,7 +256,9 @@ export const ReviewerVerifyView: React.FC = () => {
                 onChange={(e) => setRatioOk(e.target.checked)}
                 className="w-4 h-4 text-purple-600 rounded"
               />
-              <span className={`text-xs font-semibold ${ratioOk ? 'text-emerald-700' : 'text-slate-400'}`}>
+              <span
+                className={`text-xs font-semibold ${ratioOk ? 'text-emerald-700' : 'text-slate-400'}`}
+              >
                 {ratioOk ? 'ผ่านเกณฑ์' : 'ไม่ผ่าน'}
               </span>
             </label>
@@ -271,7 +280,9 @@ export const ReviewerVerifyView: React.FC = () => {
                 onChange={(e) => setAttendanceOk(e.target.checked)}
                 className="w-4 h-4 text-purple-600 rounded"
               />
-              <span className={`text-xs font-semibold ${attendanceOk ? 'text-emerald-700' : 'text-slate-400'}`}>
+              <span
+                className={`text-xs font-semibold ${attendanceOk ? 'text-emerald-700' : 'text-slate-400'}`}
+              >
                 {attendanceOk ? 'ผ่านเกณฑ์' : 'ไม่ผ่าน'}
               </span>
             </label>
@@ -293,7 +304,9 @@ export const ReviewerVerifyView: React.FC = () => {
                 onChange={(e) => setTraitsOk(e.target.checked)}
                 className="w-4 h-4 text-purple-600 rounded"
               />
-              <span className={`text-xs font-semibold ${traitsOk ? 'text-emerald-700' : 'text-slate-400'}`}>
+              <span
+                className={`text-xs font-semibold ${traitsOk ? 'text-emerald-700' : 'text-slate-400'}`}
+              >
                 {traitsOk ? 'ผ่านเกณฑ์' : 'ไม่ผ่าน'}
               </span>
             </label>
@@ -315,7 +328,9 @@ export const ReviewerVerifyView: React.FC = () => {
                 onChange={(e) => setReadingOk(e.target.checked)}
                 className="w-4 h-4 text-purple-600 rounded"
               />
-              <span className={`text-xs font-semibold ${readingOk ? 'text-emerald-700' : 'text-slate-400'}`}>
+              <span
+                className={`text-xs font-semibold ${readingOk ? 'text-emerald-700' : 'text-slate-400'}`}
+              >
                 {readingOk ? 'ผ่านเกณฑ์' : 'ไม่ผ่าน'}
               </span>
             </label>
@@ -331,7 +346,9 @@ export const ReviewerVerifyView: React.FC = () => {
                 Four-Eyes Principle บังคับใช้: ไม่อนุญาตให้ผู้สอนตรวจเอกสารของตนเอง
               </p>
               <p className="text-[11px] text-rose-800 mt-1">
-                ระบบตรวจพบว่าคุณ ({currentUser.full_name}) เป็นผู้สอนประจำวิชา {course.course_code} {course.course_name} นี้ จึงไม่สามารถดำเนินการตรวจรับรองหรือส่งกลับแก้ไขได้ตามมาตรฐานธรรมาภิบาลข้อมูลของ สพป.
+                ระบบตรวจพบว่าคุณ ({currentUser.full_name}) เป็นผู้สอนประจำวิชา {course.course_code}{' '}
+                {course.course_name} นี้
+                จึงไม่สามารถดำเนินการตรวจรับรองหรือส่งกลับแก้ไขได้ตามมาตรฐานธรรมาภิบาลข้อมูลของ สพป.
               </p>
             </div>
           </div>
