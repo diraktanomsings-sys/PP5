@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { PP5Submission, Course } from '../../types/schema';
 import { useApp } from '../../context/AppContext';
 import {
@@ -37,6 +37,7 @@ export function GradeSheetSimulator({
   const [tab, setTab] = useState<string>('pdf');
   const [versionIndex, setVersionIndex] = useState(0);
   const [sheets, setSheets] = useState<Sheet[]>([]);
+  const excelRead = useRef<{ url: string; result: Promise<Sheet[]> } | undefined>(undefined);
   const [sheetIndex, setSheetIndex] = useState(0);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -55,14 +56,23 @@ export function GradeSheetSimulator({
     setError('');
     setSheets([]);
     setSheetIndex(0);
-    void (async () => {
-      const res = await fetch(v.excel_file_url, { credentials: 'same-origin' });
-      if (!res.ok) throw new Error('เปิด Excel ไม่สำเร็จ');
-      const { readWorkbook } = await import('../../lib/workbook');
-      const rows = readWorkbook(new Uint8Array(await res.arrayBuffer()));
-      if (active) setSheets(rows);
-    })()
+    if (excelRead.current?.url !== v.excel_file_url) {
+      const url = v.excel_file_url;
+      const result = (async () => {
+        const res = await fetch(url, { credentials: 'same-origin' });
+        if (!res.ok) throw new Error('เปิด Excel ไม่สำเร็จ');
+        const { readWorkbook } = await import('../../lib/workbook');
+        return readWorkbook(new Uint8Array(await res.arrayBuffer()));
+      })();
+      excelRead.current = { url, result };
+    }
+    const read = excelRead.current;
+    void read.result
+      .then((rows) => {
+        if (active) setSheets(rows);
+      })
       .catch((e) => {
+        if (excelRead.current === read) excelRead.current = undefined;
         if (active) setError(e instanceof Error ? e.message : 'อ่านไฟล์ไม่สำเร็จ');
       })
       .finally(() => {
@@ -146,13 +156,13 @@ export function GradeSheetSimulator({
         </button>
       </div>
       <div className="p-4 sm:p-5">
-        {tab === 'pdf' && (
+        <div hidden={tab !== 'pdf'}>
           <React.Suspense fallback={<p>กำลังเปิด PDF…</p>}>
             <div className="pp5-pdf">
               <PdfPreview url={v.pdf_file_url + '&inline=1'} />
             </div>
           </React.Suspense>
-        )}
+        </div>
         {tab === 'excel' && (
           <>
             <p className="mb-3 text-xs text-slate-500">

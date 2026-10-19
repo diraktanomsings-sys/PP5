@@ -1,4 +1,3 @@
-import { uploadPresigned } from '@vercel/blob/client';
 import type { Role, Snapshot, FileRecord } from './types';
 export class RequestError extends Error {
   constructor(
@@ -37,6 +36,7 @@ export async function uploadFile(
     snapshot.role,
   );
   if (snapshot.storage === 'blob') {
+    const { uploadPresigned } = await import('@vercel/blob/client');
     await uploadPresigned(intent.pathname, file, {
       access: 'private',
       contentType:
