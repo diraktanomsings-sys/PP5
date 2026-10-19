@@ -21,6 +21,8 @@ export interface StoredFile extends FileRecord {
   expiresAt: number;
   purpose?: 'annotation';
   metrics?: import('../src/production/types.js').Version['metrics'];
+  drive?: { id: string; folderId: string; webViewLink: string; copiedAt: string };
+  sourceReleased?: boolean;
 }
 export interface Session {
   userId: string;
@@ -36,6 +38,8 @@ export interface State {
   files: Record<string, StoredFile>;
   attempts: Record<string, { count: number; until: number }>;
   settings?: SchoolSettings;
+  driveConfig?: import('./drive-bridge.js').DriveConfig;
+  driveJobs?: Record<string, import('./drive-bridge.js').DriveJob>;
 }
 export const emptyState = (): State => ({
   users: [],

@@ -9,6 +9,7 @@ import type { Role } from '../src/production/types.js';
 import type { ObjectStorage } from './storage.js';
 import { ApiError, requireThat } from './security.js';
 import { signedPdf } from './signed-pdf.js';
+import type { DriveBridge } from './drive-bridge.js';
 
 const COOKIE = 'pp5_session';
 function token(req: Request) {
@@ -37,7 +38,12 @@ const mime = (kind: string) =>
 const disposition = (name: string, inline = false) =>
   `${inline ? 'inline' : 'attachment'}; filename="document"; filename*=UTF-8''${encodeURIComponent(name).replace(/'/g, '%27')}`;
 
-export function createHttp(service: Service, storage: ObjectStorage, origin: string) {
+export function createHttp(
+  service: Service,
+  storage: ObjectStorage,
+  origin: string,
+  drive?: DriveBridge,
+) {
   const app = express();
   app.disable('x-powered-by');
   app.use((_req, res, next) => {
@@ -62,6 +68,21 @@ export function createHttp(service: Service, storage: ObjectStorage, origin: str
   app.all('/api/pp5', async (req, res) => {
     try {
       const action = String(req.query.action || 'state');
+      if (req.method === 'POST' && action === 'drive-job') {
+        requireThat(drive, 404, 'ไม่พบช่องทางรับส่งไฟล์');
+        const payload = JSON.stringify(await drive.payload(req.body?.key));
+        res.type('application/json');
+        await pipeline(
+          Readable.from(
+            (function* () {
+              for (let i = 0; i < payload.length; i += 64 * 1024)
+                yield payload.slice(i, i + 64 * 1024);
+            })(),
+          ),
+          res,
+        );
+        return;
+      }
       if (req.method === 'GET') {
         if (action === 'health') {
           const s = await service.store.read();
@@ -194,6 +215,18 @@ export function createHttp(service: Service, storage: ObjectStorage, origin: str
         return;
       }
       sameOrigin(req, origin);
+      if (action === 'drive-config') {
+        requireThat(drive, 404, 'ไม่รองรับการเชื่อม Drive ในโหมดนี้');
+        await drive.configure(service, token(req), role(req), req.body);
+        res.json({ ok: true });
+        return;
+      }
+      if (action === 'drive-migrate') {
+        requireThat(drive, 404, 'ไม่รองรับการเชื่อม Drive ในโหมดนี้');
+        await drive.migrate(service, token(req), role(req), req.body.id);
+        res.json({ ok: true });
+        return;
+      }
       if (action === 'setup') {
         setCookie(res, await service.setup(req.body));
         res.json({ ok: true });
@@ -229,12 +262,26 @@ export function createHttp(service: Service, storage: ObjectStorage, origin: str
         const file = await service.pendingFile(token(req), String(req.query.id));
         verifyFileBytes(file, req.body);
         await storage.write(file, req.body);
-        res.json(await service.readyFile(token(req), file.id, req.body));
+        res.json(await service.readyFile(token(req), file.id, req.body, storage.persist));
         return;
       }
       if (action === 'finalize') {
         const file = await service.pendingFile(token(req), req.body.id);
-        res.json(await service.readyFile(token(req), file.id, await storage.bytes(file)));
+        const result = await service.readyFile(
+          token(req),
+          file.id,
+          await storage.bytes(file),
+          storage.persist,
+        );
+        const saved = (await service.store.read()).files[file.id];
+        if (saved.drive && storage.release) {
+          try {
+            await storage.release(saved);
+          } catch {
+            console.warn('PP5 temporary upload cleanup pending');
+          }
+        }
+        res.json(result);
         return;
       }
       if (action === 'submit') await service.submit(token(req), role(req), req.body);

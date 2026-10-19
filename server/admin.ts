@@ -199,8 +199,16 @@ export async function adminCommand(
         }
         s.settings.schoolLogo = logo;
       }
-      if (body.organizationDriveUrl !== undefined)
-        s.settings.organizationDriveUrl = driveUrl(body.organizationDriveUrl);
+      if (body.organizationDriveUrl !== undefined) {
+        const url = driveUrl(body.organizationDriveUrl);
+        requireThat(
+          !s.driveConfig?.enabled ||
+            url === `https://drive.google.com/drive/folders/${s.driveConfig.folderId}`,
+          409,
+          'เปลี่ยนปลายทางผ่านการเชื่อม Google Drive เท่านั้น',
+        );
+        s.settings.organizationDriveUrl = url;
+      }
       if (body.organizationDriveTitle !== undefined)
         s.settings.organizationDriveTitle = text(body.organizationDriveTitle, 'ชื่อโฟลเดอร์');
       service.log(s, admin, 'SCHOOL_SETTINGS_UPDATED', 'school', {

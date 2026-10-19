@@ -237,6 +237,23 @@ export class Service {
       role,
       storage: this.storage,
       settings: s.settings || {},
+      drive: s.driveConfig
+        ? {
+            enabled: s.driveConfig.enabled,
+            folderId: s.driveConfig.folderId,
+            folderName: s.driveConfig.folderName,
+            ...(role === 'ADMIN'
+              ? {
+                  url: s.driveConfig.url,
+                  ownerEmail: s.driveConfig.ownerEmail,
+                  remaining: Object.values(s.files)
+                    .filter((f) => f.ready && f.used && !f.drive)
+                    .map((f) => ({ id: f.id, name: f.name })),
+                  stored: Object.values(s.files).filter((f) => f.used && f.drive).length,
+                }
+              : {}),
+          }
+        : undefined,
       terms: s.terms,
       courses,
       people: s.users
@@ -497,7 +514,12 @@ export class Service {
     );
     return f;
   }
-  async readyFile(token: string, fileId: string, bytes: Uint8Array) {
+  async readyFile(
+    token: string,
+    fileId: string,
+    bytes: Uint8Array,
+    persist?: (file: StoredFile, bytes: Uint8Array) => Promise<StoredFile['drive']>,
+  ) {
     const f = await this.pendingFile(token, fileId);
     verifyFileBytes(f, bytes);
     const sha256 = digest(bytes);
@@ -518,6 +540,7 @@ export class Service {
         requireThat(false, 400, 'โครงสร้างข้อมูล Excel ไม่ถูกต้องหรือมีขนาดขยายเกินกำหนด');
       }
     }
+    const drive = await persist?.({ ...f, sha256 }, bytes);
     await this.store.write((s) => {
       const u = this.identity(s, token);
       const file = s.files[fileId];
@@ -529,6 +552,7 @@ export class Service {
       file.sha256 = sha256;
       file.ready = true;
       file.metrics = metrics;
+      if (drive) file.drive = drive;
     });
     return { id: f.id, name: f.name, kind: f.kind, size: f.size, sha256 };
   }
