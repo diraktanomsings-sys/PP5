@@ -35,7 +35,7 @@ export function driveUrl(value: unknown) {
 }
 export function courseData(s: State, body: any): Omit<Course, 'id' | 'createdAt'> {
   requireThat(
-    s.terms.some((t) => t.id === body.termId),
+    s.terms.some((t) => t.id === body.termId && !t.deletedAt),
     400,
     'ไม่พบภาคเรียน',
   );
@@ -79,6 +79,12 @@ export function courseData(s: State, body: any): Omit<Course, 'id' | 'createdAt'
   };
 }
 export const adminActions = new Set([
+  'user-delete',
+  'user-restore',
+  'course-delete',
+  'course-restore',
+  'term-delete',
+  'term-restore',
   'school-settings',
   'user-edit',
   'user-password',
@@ -112,16 +118,89 @@ export async function adminCommand(
     );
   return service.store.write((s) => {
     const admin = service.actor(s, token, role, ['ADMIN']);
-    if (action === 'user-password') {
+    if (
+      [
+        'user-delete',
+        'user-restore',
+        'course-delete',
+        'course-restore',
+        'term-delete',
+        'term-restore',
+      ].includes(action)
+    ) {
+      requireThat(body.confirmed === true, 400, 'กรุณายืนยันรายการ');
+      const [kind, command] = action.split('-');
+      const remove = command === 'delete';
+      const list = kind === 'user' ? s.users : kind === 'course' ? s.courses : s.terms;
+      const item = list.find((v) => v.id === body.id);
+      requireThat(item, 404, 'ไม่พบรายการ');
+      requireThat(
+        remove ? !item.deletedAt : !!item.deletedAt,
+        409,
+        'สถานะรายการเปลี่ยนแล้ว กรุณารีเฟรช',
+      );
+      if (kind === 'user') {
+        const u = s.users.find((u) => u.id === item.id)!;
+        requireThat(u.id !== admin.id, 400, 'ลบบัญชีของตนเองไม่ได้');
+        if (remove)
+          requireThat(
+            !s.courses.some((c) => !c.deletedAt && (c.teacherId === u.id || c.reviewerId === u.id)),
+            409,
+            'ครูยังมีรายวิชาหรืองานตรวจ กรุณาย้ายผู้รับผิดชอบหรือลบรายวิชาก่อน',
+          );
+        u.active = false;
+        for (const [key, session] of Object.entries(s.sessions))
+          if (session.userId === u.id) delete s.sessions[key];
+      } else if (kind === 'course') {
+        const c = s.courses.find((c) => c.id === item.id)!;
+        if (!remove)
+          requireThat(
+            s.terms.some((t) => t.id === c.termId && !t.deletedAt) &&
+              s.users.some(
+                (u) =>
+                  u.id === c.teacherId && !u.deletedAt && u.active && u.roles.includes('TEACHER'),
+              ) &&
+              (!c.reviewerId ||
+                s.users.some(
+                  (u) =>
+                    u.id === c.reviewerId &&
+                    !u.deletedAt &&
+                    u.active &&
+                    u.roles.includes('REVIEWER'),
+                )),
+            409,
+            'กู้คืนภาคเรียนและเปิดใช้งานครูผู้สอน/ผู้ตรวจก่อนกู้คืนรายวิชา',
+          );
+        c.open = false;
+        const sub = s.submissions.find((sub) => sub.courseId === c.id);
+        if (sub) sub.revision++;
+      } else {
+        const term = s.terms.find((t) => t.id === item.id)!;
+        if (remove) {
+          requireThat(!term.active, 409, 'ตั้งภาคเรียนอื่นเป็นภาคเรียนปัจจุบันก่อนลบ');
+          requireThat(
+            !s.courses.some((c) => c.termId === term.id && !c.deletedAt),
+            409,
+            'ภาคเรียนยังมีรายวิชา กรุณาลบรายวิชาในภาคเรียนนี้ก่อน',
+          );
+        }
+        term.active = false;
+      }
+      if (remove) item.deletedAt = new Date().toISOString();
+      else delete item.deletedAt;
+      service.log(s, admin, `${kind.toUpperCase()}_${remove ? 'DELETED' : 'RESTORED'}`, item.id, {
+        recoverable: true,
+      });
+    } else if (action === 'user-password') {
       const u = s.users.find((u) => u.id === body.id);
-      requireThat(u && passwordHash, 404, 'ไม่พบบัญชี');
+      requireThat(u && !u.deletedAt && passwordHash, 404, 'ไม่พบบัญชีที่ใช้งานอยู่');
       u.passwordHash = passwordHash;
       for (const [key, session] of Object.entries(s.sessions))
         if (session.userId === u.id) delete s.sessions[key];
       service.log(s, admin, 'USER_PASSWORD_RESET', u.id);
     } else if (action === 'user-edit') {
       const u = s.users.find((u) => u.id === body.id);
-      requireThat(u, 404, 'ไม่พบบัญชี');
+      requireThat(u && !u.deletedAt, 404, 'ไม่พบบัญชีที่ใช้งานอยู่');
       const nextRoles = body.roles ?? u.roles;
       requireThat(
         Array.isArray(nextRoles) &&
@@ -217,7 +296,7 @@ export async function adminCommand(
       });
     } else if (action === 'term-active' || action === 'term-edit') {
       const t = s.terms.find((t) => t.id === body.id);
-      requireThat(t, 404, 'ไม่พบภาคเรียน');
+      requireThat(t && !t.deletedAt, 404, 'ไม่พบภาคเรียนที่ใช้งานอยู่');
       if (action === 'term-active') {
         s.terms.forEach((t) => (t.active = false));
         t.active = true;
@@ -233,7 +312,7 @@ export async function adminCommand(
       service.log(s, admin, 'TERM_UPDATED', t.id);
     } else if (action === 'course-edit') {
       const c = s.courses.find((c) => c.id === body.id);
-      requireThat(c, 404, 'ไม่พบรายวิชา');
+      requireThat(c && !c.deletedAt, 404, 'ไม่พบรายวิชาที่ใช้งานอยู่');
       const data = courseData(s, { ...c, ...body });
       requireThat(
         !s.submissions.some((sub) => sub.courseId === c.id) ||
@@ -263,7 +342,7 @@ export async function adminCommand(
           'เลือกภาคเรียนต้นทางและปลายทางคนละรอบ',
         );
         rows = s.courses
-          .filter((c) => c.termId === body.fromTermId)
+          .filter((c) => c.termId === body.fromTermId && !c.deletedAt)
           .map((c) => ({ ...c, termId: body.termId }));
       }
       requireThat(
@@ -300,7 +379,7 @@ export async function adminCommand(
       const seen = new Set<string>();
       for (const a of body.assignments) {
         const c = s.courses.find((c) => c.id === a.courseId);
-        requireThat(c && !seen.has(c.id), 400, 'รายวิชาไม่ถูกต้องหรือซ้ำ');
+        requireThat(c && !c.deletedAt && !seen.has(c.id), 400, 'รายวิชาไม่ถูกต้องหรือถูกลบหรือซ้ำ');
         seen.add(c.id);
         requireThat(
           s.users.some((u) => u.id === a.reviewerId && u.active && u.roles.includes('REVIEWER')) &&
@@ -322,6 +401,11 @@ export async function adminCommand(
         'บัญชีเปลี่ยนแปลง กรุณาเข้าสู่ระบบใหม่',
       );
       const sub = s.submissions.find((sub) => sub.id === body.id);
+      requireThat(
+        s.courses.some((c) => c.id === sub?.courseId && !c.deletedAt),
+        409,
+        'กู้คืนรายวิชาก่อนปลดล็อกเอกสาร',
+      );
       requireThat(
         sub &&
           sub.status === 'FINAL_LOCKED' &&

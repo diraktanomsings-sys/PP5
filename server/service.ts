@@ -79,7 +79,7 @@ export class Service {
   ) {}
   identity(state: State, token: string): StoredUser {
     const session = state.sessions[digest(token)];
-    const user = state.users.find((u) => u.id === session?.userId && u.active);
+    const user = state.users.find((u) => u.id === session?.userId && u.active && !u.deletedAt);
     requireThat(
       token && session && session.expiresAt > Date.now() && user,
       401,
@@ -183,11 +183,15 @@ export class Service {
       );
     });
     const valid = await checkPassword(body.password, user?.passwordHash || 'scrypt:dummy:');
-    requireThat(user && user.active && valid, 401, 'อีเมล/รหัสบุคลากรหรือรหัสผ่านไม่ถูกต้อง');
+    requireThat(
+      user && user.active && !user.deletedAt && valid,
+      401,
+      'อีเมล/รหัสบุคลากรหรือรหัสผ่านไม่ถูกต้อง',
+    );
     return this.store.write((s) => {
       const current = s.users.find((u) => u.id === user.id);
       requireThat(
-        current?.active && current.passwordHash === user.passwordHash,
+        current?.active && !current.deletedAt && current.passwordHash === user.passwordHash,
         401,
         'ข้อมูลเข้าสู่ระบบเปลี่ยนแปลง กรุณาลองใหม่',
       );
@@ -298,7 +302,7 @@ export class Service {
             (citizenId && u.citizenId === citizenId),
         ),
         409,
-        'อีเมลหรือรหัสบุคลากรนี้มีอยู่แล้ว',
+        'อีเมลหรือรหัสบุคลากรนี้มีอยู่แล้ว หากลบไว้ให้กู้คืนจากถังขยะ',
       );
       const user: StoredUser = {
         id: id(),
@@ -358,7 +362,7 @@ export class Service {
         requireThat(
           !s.terms.some((t) => t.year === body.year && t.semester === body.semester),
           409,
-          'มีปี/ภาคเรียนนี้แล้ว',
+          'มีปี/ภาคเรียนนี้แล้ว หากลบไว้ให้กู้คืนจากถังขยะ',
         );
         s.terms.forEach((t) => {
           t.active = false;
@@ -380,14 +384,14 @@ export class Service {
         this.log(s, admin, 'TERM_CREATED', term.id);
       } else if (action === 'course') {
         const term = s.terms.find((t) => t.id === body.termId);
-        requireThat(term, 400, 'ไม่พบภาคเรียน');
+        requireThat(term && !term.deletedAt, 400, 'ไม่พบภาคเรียนที่ใช้งานอยู่');
         const data = courseData(s, body);
         const code = text(body.code, 'รหัสวิชา', 50);
         const grade = text(body.grade, 'ชั้น/ห้อง', 50);
         requireThat(
           !s.courses.some((c) => c.termId === term.id && c.code === code && c.grade === grade),
           409,
-          'มีรายวิชาและห้องนี้ในเทอมแล้ว',
+          'มีรายวิชาและห้องนี้ในเทอมแล้ว หากลบไว้ให้กู้คืนจากถังขยะ',
         );
         const course = {
           id: id(),
@@ -399,7 +403,7 @@ export class Service {
         this.log(s, admin, 'COURSE_CREATED', course.id);
       } else if (action === 'deadline') {
         const term = s.terms.find((t) => t.id === body.id);
-        requireThat(term, 404, 'ไม่พบภาคเรียน');
+        requireThat(term && !term.deletedAt, 404, 'ไม่พบภาคเรียนที่ใช้งานอยู่');
         requireThat(Number.isFinite(Date.parse(body.deadline)), 400, 'กำหนดส่งไม่ถูกต้อง');
         term.deadline = new Date(body.deadline).toISOString();
         this.log(s, admin, 'DEADLINE_CHANGED', term.id, {
@@ -409,13 +413,17 @@ export class Service {
         });
       } else if (action === 'course-open') {
         const c = s.courses.find((c) => c.id === body.id);
-        requireThat(c && typeof body.open === 'boolean', 400, 'ข้อมูลไม่ถูกต้อง');
+        requireThat(
+          c && !c.deletedAt && typeof body.open === 'boolean',
+          400,
+          'รายวิชาถูกลบหรือข้อมูลไม่ถูกต้อง',
+        );
         c.open = body.open;
         this.log(s, admin, 'COURSE_OPEN_CHANGED', c.id, { open: c.open });
       } else if (action === 'user-active') {
         const u = s.users.find((u) => u.id === body.id);
         requireThat(
-          u && u.id !== admin.id && typeof body.active === 'boolean',
+          u && !u.deletedAt && u.id !== admin.id && typeof body.active === 'boolean',
           400,
           'ไม่สามารถเปลี่ยนสถานะบัญชีนี้',
         );
@@ -428,10 +436,14 @@ export class Service {
   }
   submissionCourse(s: State, user: Person, courseId: string) {
     const c = s.courses.find((c) => c.id === courseId);
-    requireThat(c && c.teacherId === user.id, 403, 'ส่งได้เฉพาะรายวิชาของคุณ');
+    requireThat(
+      c && !c.deletedAt && c.teacherId === user.id,
+      403,
+      'ส่งได้เฉพาะรายวิชาที่ใช้งานอยู่ของคุณ',
+    );
     const term = s.terms.find((t) => t.id === c.termId);
     requireThat(
-      term?.active && c.open && Date.parse(term.deadline) >= Date.now(),
+      term?.active && !term.deletedAt && c.open && Date.parse(term.deadline) >= Date.now(),
       409,
       'รายวิชาหรือรอบส่งปิดแล้ว กรุณาติดต่อผู้ดูแล',
     );
@@ -456,6 +468,7 @@ export class Service {
         requireThat(
           user.roles.includes('REVIEWER') &&
             c?.reviewerId === user.id &&
+            !c.deletedAt &&
             c.teacherId !== user.id &&
             body.kind === 'pdf' &&
             s.submissions.some((sub) => sub.courseId === c.id && sub.status === 'PENDING_REVIEW'),
@@ -628,7 +641,7 @@ export class Service {
       const sub = s.submissions.find((sub) => sub.id === body.id);
       const c = s.courses.find((c) => c.id === sub?.courseId);
       requireThat(
-        sub && c && c.reviewerId === user.id && c.teacherId !== user.id,
+        sub && c && !c.deletedAt && c.reviewerId === user.id && c.teacherId !== user.id,
         403,
         'คุณไม่ได้รับมอบหมายหรือเป็นผู้สอนวิชานี้',
       );
@@ -687,7 +700,7 @@ export class Service {
       const sub = s.submissions.find((v) => v.id === body.id);
       const c = s.courses.find((c) => c.id === sub?.courseId);
       requireThat(
-        sub && c && c.reviewerId === user.id && c.teacherId !== user.id,
+        sub && c && !c.deletedAt && c.reviewerId === user.id && c.teacherId !== user.id,
         403,
         'คุณไม่ได้รับมอบหมายให้ตรวจรายการนี้',
       );
@@ -739,7 +752,11 @@ export class Service {
     const sub = s.submissions.find((sub) => sub.id === body.id);
     const c = s.courses.find((c) => c.id === sub?.courseId);
     requireThat(
-      sub && c && c.teacherId !== user.id && sub.versions.at(-1)?.review?.by !== user.id,
+      sub &&
+        c &&
+        !c.deletedAt &&
+        c.teacherId !== user.id &&
+        sub.versions.at(-1)?.review?.by !== user.id,
       403,
       'ผู้อนุมัติต้องเป็นคนละคนกับผู้สอนและผู้ตรวจ',
     );

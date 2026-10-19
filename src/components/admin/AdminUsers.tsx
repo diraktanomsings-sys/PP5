@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { User, UserRole } from '../../types/schema';
+import { AdminDeletionTools } from './AdminDeletionTools';
 import {
   Users,
   UserPlus,
@@ -53,6 +54,12 @@ export const AdminUsers: React.FC = () => {
   const [resetPassUser, setResetPassUser] = useState<User | null>(null);
   const [newPassInput, setNewPassInput] = useState('');
   const [showNewPass, setShowNewPass] = useState(false);
+  const [passwordReceipt, setPasswordReceipt] = useState<{
+    name: string;
+    email: string;
+    password: string;
+  }>();
+  const [showReceiptPassword, setShowReceiptPassword] = useState(false);
 
   // 4. Admin Self Password Change State
   const [showSelfPassModal, setShowSelfPassModal] = useState(false);
@@ -170,6 +177,13 @@ export const AdminUsers: React.FC = () => {
 
     const res = await adminResetPassword(resetPassUser.id, newPassInput.trim());
     if (res.success) {
+      setPasswordReceipt({
+        name: resetPassUser.full_name,
+        email: resetPassUser.email,
+        password: newPassInput.trim(),
+      });
+      setShowReceiptPassword(false);
+      setNewPassInput('');
       setSuccessMsg(`รีเซ็ตรหัสผ่านสำหรับ ${resetPassUser.full_name} เรียบร้อยแล้ว`);
       setResetPassUser(null);
       setTimeout(() => setSuccessMsg(null), 4000);
@@ -317,6 +331,7 @@ export const AdminUsers: React.FC = () => {
         </div>
       </div>
 
+      <AdminDeletionTools kind="user" />
       {successMsg && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs flex items-center gap-2 animate-in fade-in">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -708,9 +723,13 @@ export const AdminUsers: React.FC = () => {
                   <input
                     type={showNewPass ? 'text' : 'password'}
                     required
+                    minLength={12}
+                    maxLength={128}
+                    autoComplete="new-password"
+                    aria-label="กำหนดรหัสผ่านใหม่"
                     value={newPassInput}
                     onChange={(e) => setNewPassInput(e.target.value)}
-                    placeholder="ระบุรหัสผ่านใหม่"
+                    placeholder="ระบุรหัสผ่านใหม่ 12–128 ตัวอักษร"
                     className="w-full pl-3 pr-10 py-2.5 border border-slate-300 rounded-xl font-mono text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
                   />
                   <button
@@ -745,6 +764,55 @@ export const AdminUsers: React.FC = () => {
         </div>
       )}
 
+      {passwordReceipt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label="รหัสผ่านใหม่ที่ตั้งสำเร็จ"
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4 text-xs"
+          >
+            <h4 className="text-base font-bold text-blue-950">ตั้งรหัสผ่านใหม่สำเร็จ</h4>
+            <p className="font-semibold text-slate-800">
+              {passwordReceipt.name} · {passwordReceipt.email}
+            </p>
+            <p className="text-slate-500">
+              ดูรหัสใหม่เพื่อส่งให้ครูได้ในหน้าต่างนี้ เมื่อปิดจะไม่สามารถเปิดรหัสนี้ย้อนหลังได้
+              สามารถตั้งรหัสใหม่อีกครั้งเมื่อจำเป็น
+            </p>
+            <label className="block font-semibold text-slate-700">
+              รหัสผ่านใหม่ที่เพิ่งตั้ง
+              <input
+                aria-label="รหัสผ่านใหม่ที่เพิ่งตั้ง"
+                readOnly
+                autoComplete="off"
+                type={showReceiptPassword ? 'text' : 'password'}
+                value={passwordReceipt.password}
+                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono"
+              />
+            </label>
+            <div className="flex justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setShowReceiptPassword((v) => !v)}
+                className="rounded-lg border border-blue-200 px-4 py-2 font-semibold text-blue-900"
+              >
+                {showReceiptPassword ? 'ซ่อนรหัสผ่านใหม่' : 'แสดงรหัสผ่านใหม่'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPasswordReceipt(undefined);
+                  setShowReceiptPassword(false);
+                }}
+                className="rounded-lg bg-[#00236f] px-4 py-2 font-bold text-white"
+              >
+                ปิดและล้างรหัสจากหน้าจอ
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       {/* Modal 4: Admin Self Password Change */}
       {showSelfPassModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">

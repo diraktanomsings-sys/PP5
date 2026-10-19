@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import type {
   User,
   UserRole,
@@ -25,6 +25,7 @@ const anonymous: User = {
   created_at: '',
 };
 const person = (p: Person): User => ({
+  deleted_at: p.deletedAt,
   id: p.id,
   citizen_id: p.citizenId || '',
   teacher_id: p.teacherId,
@@ -57,6 +58,13 @@ function useServerApp() {
   const [initialized, setInitialized] = useState(true);
   const [publicLogo, setPublicLogo] = useState('');
   const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<Array<{ id: number; message: string }>>([]);
+  const pendingId = useRef(0);
+  const beginWait = useCallback((message: string) => {
+    const id = ++pendingId.current;
+    setPending((items) => [...items, { id, message }]);
+    return () => setPending((items) => items.filter((item) => item.id !== id));
+  }, []);
   const [error, setError] = useState('');
   const [activeView, setActiveView] = useState('login');
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
@@ -64,6 +72,7 @@ function useServerApp() {
   const current = useRef(snapshot);
   current.current = snapshot;
   const refresh = async (role?: UserRole, navigate = false) => {
+    const finishWaiting = beginWait('กำลังโหลดข้อมูลระบบ…');
     const sequence = ++generation.current;
     try {
       const health = await api<SessionPayload>('session', undefined, role ?? current.current?.role);
@@ -89,6 +98,7 @@ function useServerApp() {
         if (e instanceof RequestError && e.status === 503) setReady(false);
       }
     } finally {
+      finishWaiting();
       if (sequence === generation.current) setLoading(false);
     }
   };
@@ -98,7 +108,8 @@ function useServerApp() {
       ++generation.current;
     };
   }, []);
-  const action = async (work: () => Promise<unknown>) => {
+  const action = async (work: () => Promise<unknown>, message = 'กำลังบันทึกข้อมูล…') => {
+    const finishWaiting = beginWait(message);
     setBusy(true);
     setError('');
     try {
@@ -112,6 +123,7 @@ function useServerApp() {
       }
       return false;
     } finally {
+      finishWaiting();
       setBusy(false);
     }
   };
@@ -122,10 +134,12 @@ function useServerApp() {
     });
   const currentUser = snapshot ? person(snapshot.user) : anonymous;
   const currentRole = snapshot?.role || 'TEACHER';
-  const users = snapshot?.people.map(person) || [];
-  const academicTerms: AcademicTerm[] =
+  const archiveUsers = snapshot?.people.map(person) || [];
+  const users = archiveUsers.filter((u) => !u.deleted_at);
+  const archiveAcademicTerms: AcademicTerm[] =
     snapshot?.terms.map((t) => ({
       id: t.id,
+      deleted_at: t.deletedAt,
       year: t.year,
       semester: t.semester,
       is_active: t.active,
@@ -134,6 +148,7 @@ function useServerApp() {
       is_archived: t.archived || false,
       created_at: t.createdAt || '',
     })) || [];
+  const academicTerms = archiveAcademicTerms.filter((t) => !t.deleted_at);
   const activeTerm = academicTerms.find((t) => t.is_active) ||
     academicTerms[0] || {
       id: '',
@@ -145,9 +160,10 @@ function useServerApp() {
       is_archived: false,
       created_at: '',
     };
-  const courses: Course[] =
+  const archiveCourses: Course[] =
     snapshot?.courses.map((c) => ({
       id: c.id,
+      deleted_at: c.deletedAt,
       term_id: c.termId,
       course_code: c.code,
       course_name: c.name,
@@ -159,9 +175,10 @@ function useServerApp() {
       is_open_submission: c.open,
       created_at: c.createdAt || '',
     })) || [];
+  const courses = archiveCourses.filter((c) => !c.deleted_at);
   const assignments: ReviewerAssignment[] =
     snapshot?.courses
-      .filter((c) => c.reviewerId)
+      .filter((c) => c.reviewerId && !c.deletedAt)
       .map((c) => ({
         id: c.id,
         term_id: c.termId,
@@ -170,7 +187,7 @@ function useServerApp() {
         assignment_type: c.assignmentType || 'DEPARTMENT',
         created_at: c.createdAt || '',
       })) || [];
-  const submissions: PP5Submission[] =
+  const archiveSubmissions: PP5Submission[] =
     snapshot?.submissions.map((s) => ({
       id: s.id,
       course_id: s.courseId,
@@ -210,6 +227,7 @@ function useServerApp() {
         annotated_file_name: v.review?.annotated?.name,
       })),
     })) || [];
+  const submissions = archiveSubmissions.filter((s) => courses.some((c) => c.id === s.course_id));
   const auditLogs: AuditLog[] =
     snapshot?.audit.map((a) => ({
       id: a.id,
@@ -220,13 +238,14 @@ function useServerApp() {
       action_type: a.action as AuditLog['action_type'],
       target_id: a.target,
       target_name:
-        courses.find((c) => c.id === a.target)?.course_name ||
-        users.find((u) => u.id === a.target)?.full_name ||
+        archiveCourses.find((c) => c.id === a.target)?.course_name ||
+        archiveUsers.find((u) => u.id === a.target)?.full_name ||
         a.target,
       details: a.details,
       ip_address: 'ไม่บันทึก',
     })) || [];
   const verifyCredentials = async (identifier: string, password: string) => {
+    const finishWaiting = beginWait('กำลังตรวจสอบการเข้าสู่ระบบ…');
     setError('');
     try {
       await api('login', { identifier, password });
@@ -234,6 +253,8 @@ function useServerApp() {
       return { user: true, error: '' };
     } catch (e) {
       return { user: null, error: e instanceof Error ? e.message : 'เข้าสู่ระบบไม่สำเร็จ' };
+    } finally {
+      finishWaiting();
     }
   };
   const logout = () =>
@@ -287,7 +308,7 @@ function useServerApp() {
         s.role,
       );
       await refresh();
-    });
+    }, 'กำลังอัปโหลดและตรวจสอบไฟล์…');
   const reviewSubmission = (
     id: string,
     pass: boolean,
@@ -330,11 +351,15 @@ function useServerApp() {
       a.download = name;
       a.click();
       setTimeout(() => URL.revokeObjectURL(blob), 1000);
-    });
+    }, 'กำลังเตรียมไฟล์ดาวน์โหลด…');
   return {
     currentUser,
     currentRole,
     users,
+    archiveUsers,
+    archiveAcademicTerms,
+    archiveCourses,
+    archiveSubmissions,
     academicTerms,
     activeTerm,
     courses,
@@ -349,6 +374,7 @@ function useServerApp() {
     ready,
     initialized,
     busy,
+    waitingMessage: pending[0]?.message || '',
     error,
     setError,
     refresh,

@@ -6,6 +6,7 @@ import {
   type RenderTask,
 } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { LoadingOverlay } from '../components/common/LoadingOverlay';
 GlobalWorkerOptions.workerSrc = workerUrl;
 export default function PdfPreview({ url }: { url: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -79,7 +80,7 @@ export default function PdfPreview({ url }: { url: string }) {
           {error}
         </p>
       )}
-      {loading && <p role="status">กำลังอ่านไฟล์ PDF…</p>}
+      {loading && <LoadingOverlay message="กำลังอ่านไฟล์ PDF…" />}
       <div className="actions">
         <button disabled={!doc || page === 1 || loading} onClick={() => setPage((p) => p - 1)}>
           หน้าก่อน

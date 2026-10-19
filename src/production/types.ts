@@ -1,6 +1,7 @@
 export type Role = 'TEACHER' | 'REVIEWER' | 'EXECUTIVE' | 'ADMIN';
 export type Status = 'PENDING_REVIEW' | 'REJECTED_REVISION' | 'PENDING_DIRECTOR' | 'FINAL_LOCKED';
 export interface Person {
+  deletedAt?: string;
   id: string;
   name: string;
   email: string;
@@ -12,6 +13,7 @@ export interface Person {
   createdAt?: string;
 }
 export interface Term {
+  deletedAt?: string;
   id: string;
   year: number;
   semester: number;
@@ -22,6 +24,7 @@ export interface Term {
   createdAt?: string;
 }
 export interface Course {
+  deletedAt?: string;
   id: string;
   termId: string;
   code: string;

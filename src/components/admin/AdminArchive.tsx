@@ -37,15 +37,15 @@ import {
 
 export const AdminArchive: React.FC = () => {
   const {
-    courses,
+    archiveCourses: courses,
     download,
     downloadArchive,
-    submissions,
+    archiveSubmissions: submissions,
     emergencyUnlock,
     activeTerm,
-    academicTerms,
+    archiveAcademicTerms: academicTerms,
     currentRole,
-    users,
+    archiveUsers: users,
     organizationDriveUrl,
     organizationDriveFolderId,
     updateOrganizationDriveUrl,
@@ -666,6 +666,11 @@ export const AdminArchive: React.FC = () => {
                       {/* Course Name */}
                       <td className="px-4 py-3.5 font-medium text-slate-800">
                         <div>{course.course_name}</div>
+                        {course.deleted_at && (
+                          <div className="mt-1 text-[10px] font-semibold text-slate-500">
+                            รายวิชาถูกลบ · เก็บไฟล์และประวัติเดิม
+                          </div>
+                        )}
                         <div className="text-[10px] text-slate-400 font-normal">
                           {course.department}
                         </div>
@@ -750,19 +755,21 @@ export const AdminArchive: React.FC = () => {
                           )}
 
                           {/* 4. Emergency Unlock (Admin Only) */}
-                          {currentRole === 'ADMIN' && submission.status === 'FINAL_LOCKED' && (
-                            <button
-                              onClick={() => {
-                                setSelectedSubToUnlock(submission.id);
-                                setUnlockModalOpen(true);
-                              }}
-                              className="px-2 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold inline-flex items-center gap-1 cursor-pointer"
-                              title="ปลดล็อกฉุกเฉินด้วยรหัสผ่าน (Admin Only)"
-                            >
-                              <Unlock className="w-3 h-3" />
-                              <span className="hidden sm:inline">ปลดล็อก</span>
-                            </button>
-                          )}
+                          {currentRole === 'ADMIN' &&
+                            !course.deleted_at &&
+                            submission.status === 'FINAL_LOCKED' && (
+                              <button
+                                onClick={() => {
+                                  setSelectedSubToUnlock(submission.id);
+                                  setUnlockModalOpen(true);
+                                }}
+                                className="px-2 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold inline-flex items-center gap-1 cursor-pointer"
+                                title="ปลดล็อกฉุกเฉินด้วยรหัสผ่าน (Admin Only)"
+                              >
+                                <Unlock className="w-3 h-3" />
+                                <span className="hidden sm:inline">ปลดล็อก</span>
+                              </button>
+                            )}
                         </div>
                       </td>
                     </tr>

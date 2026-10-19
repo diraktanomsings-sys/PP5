@@ -10,6 +10,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import type { Sheet } from '../../lib/workbook';
+import { LoadingOverlay } from './LoadingOverlay';
 const PdfPreview = React.lazy(() => import('../../production/PdfPreview'));
 const tabs = [
   ['pdf', 'เอกสาร PDF'],
@@ -157,7 +158,7 @@ export function GradeSheetSimulator({
       </div>
       <div className="p-4 sm:p-5">
         <div hidden={tab !== 'pdf'}>
-          <React.Suspense fallback={<p>กำลังเปิด PDF…</p>}>
+          <React.Suspense fallback={<LoadingOverlay message="กำลังเปิด PDF…" />}>
             <div className="pp5-pdf">
               <PdfPreview url={v.pdf_file_url + '&inline=1'} />
             </div>
@@ -169,7 +170,7 @@ export function GradeSheetSimulator({
               แสดงค่าที่บันทึกไว้ใน Excel โดยไม่คำนวณสูตรใหม่ แสดงตัวอย่างสูงสุด 500 แถวต่อชีต
               ดาวน์โหลดต้นฉบับเพื่อตรวจสูตรและรูปแบบทั้งหมด
             </p>
-            {loading && <p>กำลังอ่าน Excel…</p>}
+            {loading && <LoadingOverlay message="กำลังอ่านไฟล์ Excel…" />}
             {error && (
               <p role="alert" className="text-red-700">
                 {error}

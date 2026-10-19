@@ -1,4 +1,29 @@
 @import 'tailwindcss';
+/* Give every usable control a consistent click affordance after the CSS reset. */
+button:not(:disabled),
+a[href],
+summary,
+select:not(:disabled),
+input:is(
+    [type='button'],
+    [type='submit'],
+    [type='reset'],
+    [type='checkbox'],
+    [type='radio'],
+    [type='file']
+  ):not(:disabled),
+[role='button']:not([aria-disabled='true']),
+label[for],
+label:has(input:is([type='checkbox'], [type='radio'], [type='file']):not(:disabled)) {
+  cursor: pointer;
+}
+button:disabled,
+select:disabled,
+input:disabled,
+fieldset:disabled button,
+[aria-disabled='true'] {
+  cursor: not-allowed;
+}
 .pp5-pdf .pdf-reader {
   padding: 1rem;
   background: #e2e8f0;
