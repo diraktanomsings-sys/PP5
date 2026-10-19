@@ -1,5 +1,5 @@
 import { PGlite } from '@electric-sql/pglite';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { Database } from './store.js';
 import type { ObjectStorage } from './storage.js';
@@ -20,6 +20,9 @@ export async function localStorage(directory: string): Promise<ObjectStorage> {
   };
   return {
     kind: 'local',
+    remove: async (file) => {
+      await rm(location(file.id), { force: true });
+    },
     bytes: (file) => readFile(location(file.id)),
     read: async (file) => {
       const { createReadStream } = await import('node:fs');

@@ -225,8 +225,17 @@ export class Service {
     const user = this.identity(s, token);
     const role = selected || user.roles[0];
     this.actor(s, token, role);
-    const courses = s.courses.filter((c) => this.visible(s, user, role, c.id));
-    const ids = new Set(courses.map((c) => c.id));
+    const courses = s.courses.filter(
+      (c) =>
+        this.visible(s, user, role, c.id) ||
+        (role === 'TEACHER' &&
+          !c.deletedAt &&
+          c.open &&
+          s.terms.some((t) => t.id === c.termId && t.active && !t.deletedAt) &&
+          !s.submissions.some((sub) => sub.courseId === c.id)),
+    );
+    // Available subjects can be selected by any teacher; existing documents remain owner-scoped.
+    const ids = new Set(courses.filter((c) => this.visible(s, user, role, c.id)).map((c) => c.id));
     const peopleIds = new Set([user.id, ...courses.flatMap((c) => [c.teacherId, c.reviewerId])]);
     const submissions = s.submissions.filter((sub) => ids.has(sub.courseId));
     for (const sub of submissions) {
@@ -437,9 +446,11 @@ export class Service {
   submissionCourse(s: State, user: Person, courseId: string) {
     const c = s.courses.find((c) => c.id === courseId);
     requireThat(
-      c && !c.deletedAt && c.teacherId === user.id,
+      c &&
+        !c.deletedAt &&
+        (c.teacherId === user.id || !s.submissions.some((sub) => sub.courseId === c.id)),
       403,
-      'ส่งได้เฉพาะรายวิชาที่ใช้งานอยู่ของคุณ',
+      'วิชานี้มีครูท่านอื่นส่งแล้ว หรือรายวิชาถูกลบ กรุณารีเฟรชรายการ',
     );
     const term = s.terms.find((t) => t.id === c.termId);
     requireThat(
@@ -604,6 +615,15 @@ export class Service {
         409,
         'รายการเปลี่ยนแปลงแล้ว กรุณารีเฟรช',
       );
+      if (!previous && course.teacherId !== user.id) {
+        const previousTeacherId = course.teacherId;
+        course.teacherId = user.id;
+        this.log(s, user, 'COURSE_CLAIMED_BY_TEACHER', course.id, { previousTeacherId });
+      }
+      if (course.reviewerId === user.id) {
+        course.reviewerId = '';
+        this.log(s, user, 'REVIEWER_ASSIGNMENT_REQUIRED', course.id);
+      }
       const safe = (f: StoredFile) => ({
         id: f.id,
         name: f.name,

@@ -13,7 +13,7 @@ export interface DriveConfig {
   verifiedAt: string;
 }
 export interface DriveJob {
-  kind: 'probe' | 'write' | 'read';
+  kind: 'probe' | 'write' | 'read' | 'delete';
   folderId: string;
   fileId?: string;
   driveId?: string;
@@ -72,7 +72,7 @@ export class DriveBridge {
       sha256: job.sha256,
       driveId: job.driveId,
     };
-    if (job.kind === 'read') return { ...info, file };
+    if (job.kind === 'read' || job.kind === 'delete') return { ...info, file };
     const bytes = await this.source.bytes(f);
     requireThat(
       bytes.length === job.size && digest(bytes) === job.sha256,
@@ -218,23 +218,79 @@ export class DriveBridge {
       409,
       'ข้อมูลไฟล์ไม่ตรงกับต้นฉบับ',
     );
-    const r = await this.invoke(config, {
-      kind: 'write',
-      fileId: file.id,
-      size: file.size,
-      sha256: file.sha256,
+    const writeToken = opaqueToken();
+    await this.store.write((s) => {
+      requireThat(
+        !Object.values(s.purges || {}).some((p) => p.fileIds.includes(file.id)),
+        409,
+        'ไฟล์อยู่ระหว่างลบถาวร',
+      );
+      requireThat(
+        !s.storageWrites?.[file.id] || s.storageWrites[file.id].expiresAt <= Date.now(),
+        409,
+        'ไฟล์กำลังบันทึกอยู่',
+      );
+      s.storageWrites ||= {};
+      s.storageWrites[file.id] = { token: writeToken, expiresAt: Date.now() + 150000 };
     });
+    try {
+      const r = await this.invoke(config, {
+        kind: 'write',
+        fileId: file.id,
+        size: file.size,
+        sha256: file.sha256,
+      });
+      requireThat(
+        idPattern.test(String(r.id)) && r.sha256 === file.sha256 && r.size === file.size,
+        409,
+        'ไฟล์ Drive ไม่ตรงกับต้นฉบับ',
+      );
+      const pointer = {
+        id: r.id,
+        folderId: config.folderId,
+        webViewLink: `https://drive.google.com/file/d/${r.id}/view`,
+        copiedAt: new Date().toISOString(),
+      };
+      // Save the pointer before releasing the storage lease, including an upload that later expires.
+      await this.store.write((s) => {
+        const current = s.files[file.id];
+        requireThat(current && current.size === file.size, 409, 'รายการไฟล์เปลี่ยนแปลง');
+        current.drive = pointer;
+      });
+      return pointer;
+    } finally {
+      await this.store.write((s) => {
+        if (s.storageWrites?.[file.id]?.token === writeToken) delete s.storageWrites[file.id];
+      });
+    }
+  }
+  async remove(file: StoredFile) {
+    const s = await this.store.read();
     requireThat(
-      idPattern.test(String(r.id)) && r.sha256 === file.sha256 && r.size === file.size,
-      409,
-      'ไฟล์ Drive ไม่ตรงกับต้นฉบับ',
+      Object.values(s.purges || {}).some((job) => job.fileIds.includes(file.id)),
+      403,
+      'ลบไฟล์ได้เฉพาะรายการลบถาวรที่ยืนยันแล้ว',
     );
-    return {
-      id: r.id,
-      folderId: config.folderId,
-      webViewLink: `https://drive.google.com/file/d/${r.id}/view`,
-      copiedAt: new Date().toISOString(),
-    };
+    if (file.drive || s.driveConfig?.enabled) {
+      const config = s.driveConfig;
+      requireThat(
+        config && (!file.drive || config.folderId === file.drive.folderId),
+        503,
+        'ตัวรับไฟล์ Drive ของรายการนี้ไม่พร้อม',
+      );
+      const r = await this.invoke(config, {
+        kind: 'delete',
+        fileId: file.id,
+        driveId: file.drive?.id,
+        size: file.size,
+        sha256: file.sha256,
+      });
+      requireThat(r.deleted === true && r.fileId === file.id, 409, 'Drive ยังไม่ได้ยืนยันลบไฟล์');
+    }
+    if (!file.sourceReleased) {
+      requireThat(this.source.remove, 503, 'พื้นที่เดิมยังไม่รองรับลบไฟล์');
+      await this.source.remove(file);
+    }
   }
   async bytes(file: StoredFile) {
     if (!file.drive) return this.source.bytes(file);
@@ -285,6 +341,7 @@ export class DriveBridge {
   storage(): ObjectStorage {
     return {
       kind: this.source.kind,
+      remove: (f) => this.remove(f),
       write: this.source.write,
       bytes: (f) => this.bytes(f),
       read: async (f) => (f.drive ? Readable.from([await this.bytes(f)]) : this.source.read(f)),

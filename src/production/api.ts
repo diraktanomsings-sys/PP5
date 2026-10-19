@@ -7,8 +7,13 @@ export class RequestError extends Error {
     super(message);
   }
 }
-export async function api<T = any>(action: string, body?: unknown, role?: Role): Promise<T> {
-  const response = await fetch(`/api/pp5?action=${encodeURIComponent(action)}`, {
+export async function api<T = any>(
+  action: string,
+  body?: unknown,
+  role?: Role,
+  query?: Record<string, string>,
+): Promise<T> {
+  const response = await fetch(`/api/pp5?${new URLSearchParams({ ...query, action })}`, {
     method: body === undefined ? 'GET' : 'POST',
     credentials: 'same-origin',
     headers: {

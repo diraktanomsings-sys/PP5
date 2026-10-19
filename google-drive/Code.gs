@@ -21,7 +21,61 @@ function inside_(file, rootId) {
   return false;
 }
 function doGet() {
-  return result_({ protocol: 'PP5-DRIVE-1', service: 'School PP5 receiver' });
+  return result_({
+    protocol: 'PP5-DRIVE-1',
+    service: 'School PP5 receiver',
+    capabilities: ['permanent-delete-v1'],
+  });
+}
+// Owner-run readiness check: reads folder capabilities only; never deletes a file.
+function checkPermanentDeleteApi() {
+  var response = UrlFetchApp.fetch(
+    'https://www.googleapis.com/drive/v3/files/' +
+      PP5_FOLDER_ID +
+      '?fields=id,capabilities(canDelete,canDeleteChildren)&supportsAllDrives=true',
+    {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true,
+      followRedirects: false,
+    },
+  );
+  var body = JSON.parse(response.getContentText());
+  console.log(
+    JSON.stringify({
+      apiReady: response.getResponseCode() === 200,
+      status: response.getResponseCode(),
+      capabilities: body.capabilities || {},
+      reason: body.error ? body.error.status : '',
+    }),
+  );
+}
+function deleteManagedFile_(driveId, f) {
+  if (!/^[A-Za-z0-9_-]{1,200}$/.test(driveId)) throw new Error('ACCESS');
+  var url = 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(driveId);
+  var options = {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    muteHttpExceptions: true,
+    followRedirects: false,
+  };
+  var check = UrlFetchApp.fetch(
+    url + '?fields=id,name,parents,size,mimeType&supportsAllDrives=true',
+    options,
+  );
+  if (check.getResponseCode() === 404) return; // Retry after a completed delete is idempotent.
+  if (check.getResponseCode() !== 200) throw new Error('ACCESS');
+  var metadata = JSON.parse(check.getContentText());
+  var expectedName = 'PP5_' + f.id + '__' + f.name.replace(/[\\/\x00-\x1f]/g, '_');
+  if (
+    !metadata.parents ||
+    metadata.parents.indexOf(PP5_FOLDER_ID) < 0 ||
+    metadata.name !== expectedName ||
+    Number(metadata.size) !== f.size ||
+    metadata.mimeType === 'application/vnd.google-apps.folder'
+  )
+    throw new Error('CHANGED');
+  options.method = 'delete';
+  var deleted = UrlFetchApp.fetch(url + '?supportsAllDrives=true', options);
+  if ([204, 404].indexOf(deleted.getResponseCode()) < 0) throw new Error('ACCESS');
 }
 function doPost(e) {
   var common = { protocol: 'PP5-DRIVE-1', folderId: PP5_FOLDER_ID, private: false, ok: false };
@@ -61,6 +115,29 @@ function doPost(e) {
       common.name = root.getName();
       common.ownerEmail = Session.getEffectiveUser().getEmail();
       common.verified = true;
+    } else if (job.kind === 'delete') {
+      var f = job.file;
+      if (
+        !f ||
+        !/^[a-f0-9-]{36}$/.test(f.id) ||
+        !Number.isInteger(f.size) ||
+        f.size < 1 ||
+        f.size > 25 * 1024 * 1024 ||
+        typeof f.name !== 'string' ||
+        f.name.length > 180 ||
+        !['pdf', 'excel'].includes(f.kind)
+      )
+        throw new Error('ACCESS');
+      if (f.driveId) deleteManagedFile_(f.driveId, f);
+      else {
+        // Also remove a verified upload whose response was lost before its pointer was saved.
+        var named = root.getFilesByName(
+          'PP5_' + f.id + '__' + f.name.replace(/[\\/\x00-\x1f]/g, '_'),
+        );
+        while (named.hasNext()) deleteManagedFile_(named.next().getId(), f);
+      }
+      common.deleted = true;
+      common.fileId = f.id;
     } else {
       var f = job.file;
       if (

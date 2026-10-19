@@ -1,4 +1,16 @@
 export type Role = 'TEACHER' | 'REVIEWER' | 'EXECUTIVE' | 'ADMIN';
+export interface PurgePreview {
+  kind: 'user' | 'course' | 'term';
+  id: string;
+  label: string;
+  planHash: string;
+  fileCount: number;
+  bytes: number;
+  submissionCount: number;
+  versionCount: number;
+  removed: number;
+  continuing: boolean;
+}
 export type Status = 'PENDING_REVIEW' | 'REJECTED_REVISION' | 'PENDING_DIRECTOR' | 'FINAL_LOCKED';
 export interface Person {
   deletedAt?: string;

@@ -135,6 +135,11 @@ export async function adminCommand(
       const item = list.find((v) => v.id === body.id);
       requireThat(item, 404, 'ไม่พบรายการ');
       requireThat(
+        !s.purges?.[`${kind}:${item.id}`],
+        409,
+        'รายการนี้เริ่มลบถาวรแล้ว กรุณากดลบถาวรเพื่อดำเนินการต่อ',
+      );
+      requireThat(
         remove ? !item.deletedAt : !!item.deletedAt,
         409,
         'สถานะรายการเปลี่ยนแล้ว กรุณารีเฟรช',

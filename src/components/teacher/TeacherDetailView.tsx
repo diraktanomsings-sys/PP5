@@ -25,6 +25,7 @@ import {
 
 export const TeacherDetailView: React.FC = () => {
   const {
+    download,
     selectedSubmissionId,
     setSelectedSubmissionId,
     submissions,
@@ -223,13 +224,19 @@ export const TeacherDetailView: React.FC = () => {
                 {currentVer.annotated_file_name && (
                   <div className="mt-3 flex items-center gap-2 text-xs">
                     <span className="text-rose-800 font-semibold">ไฟล์แนบข้อบกพร่องที่ไฮไลต์:</span>
-                    <a
-                      href={currentVer.annotated_file_url}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void download(
+                          currentVer.annotated_file_url!,
+                          currentVer.annotated_file_name!,
+                        )
+                      }
                       className="inline-flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-rose-100/50 text-rose-700 rounded border border-rose-300 font-mono text-[11px] font-semibold transition-colors"
                     >
                       <Download className="w-3.5 h-3.5" />
                       <span>{currentVer.annotated_file_name}</span>
-                    </a>
+                    </button>
                   </div>
                 )}
 

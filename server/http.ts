@@ -11,6 +11,7 @@ import { ApiError, requireThat } from './security.js';
 import { signedPdf } from './signed-pdf.js';
 import type { DriveBridge } from './drive-bridge.js';
 import { selectArchive, zipSegment } from './archive.js';
+import { previewPurge, purgeStep, type PurgeKind } from './purge.js';
 
 const COOKIE = 'pp5_session';
 function token(req: Request) {
@@ -88,6 +89,18 @@ export function createHttp(
         return;
       }
       if (req.method === 'GET') {
+        if (action === 'purge-preview') {
+          res.json(
+            await previewPurge(
+              service,
+              token(req),
+              role(req),
+              String(req.query.kind) as PurgeKind,
+              String(req.query.id),
+            ),
+          );
+          return;
+        }
         if (action === 'session') {
           // Read once for public startup status and the existing role-filtered snapshot.
           // Never cache identities or authorization between requests.
@@ -286,6 +299,10 @@ export function createHttp(
       }
       if (action === 'reserve') {
         res.json(await service.reserve(token(req), role(req), req.body));
+        return;
+      }
+      if (action === 'purge') {
+        res.json(await purgeStep(service, storage, token(req), role(req), req.body));
         return;
       }
       if (action === 'upload') {

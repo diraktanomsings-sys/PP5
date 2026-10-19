@@ -29,6 +29,8 @@ export interface Session {
   expiresAt: number;
 }
 export interface State {
+  purges?: Record<string, import('./purge.js').PurgeTask>;
+  storageWrites?: Record<string, { token: string; expiresAt: number }>;
   users: StoredUser[];
   terms: Term[];
   courses: Course[];

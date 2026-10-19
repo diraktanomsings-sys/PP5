@@ -139,7 +139,7 @@ test('PP5 durable multi-account workflow and authorization', { timeout: 120_000 
     await request('admin', 'ADMIN', 'course', body);
     state = await request('teacher', 'TEACHER', 'state');
     courseId = state.courses[0].id;
-    assert.equal((await request('outsider', 'TEACHER', 'state')).courses.length, 0);
+    assert.equal((await request('outsider', 'TEACHER', 'state')).courses.length, 1);
     await request('teacher', 'ADMIN', 'state', undefined, 403);
     const response = await fetch(`${base}?action=user`, {
       method: 'POST',
@@ -174,7 +174,7 @@ test('PP5 durable multi-account workflow and authorization', { timeout: 120_000 
     return result.id as string;
   }
   await t.test(
-    'requires two real files, rejects foreign course and wrong/oversized types',
+    'requires two real files, allows selecting unsubmitted subjects and rejects wrong/oversized types',
     async () => {
       await request('teacher', 'TEACHER', 'submit', { courseId, confirmed: true }, 400);
       await request(
@@ -182,7 +182,7 @@ test('PP5 durable multi-account workflow and authorization', { timeout: 120_000 
         'TEACHER',
         'reserve',
         { courseId, kind: 'pdf', name: 'file.pdf', size: 20 },
-        403,
+        200,
       );
       await request(
         'teacher',
