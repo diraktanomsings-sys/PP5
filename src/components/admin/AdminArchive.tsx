@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { StatusBadge } from '../common/StatusBadge';
 import { CertificateHashModal } from '../common/CertificateHashModal';
+import { AdminDriveStorage } from './AdminDriveStorage';
 import {
   Archive,
   Download,
@@ -270,6 +271,7 @@ export const AdminArchive: React.FC = () => {
         </div>
       )}
 
+      {currentRole === 'ADMIN' && <AdminDriveStorage />}
       {/* 2. Google Drive Shared Folder Card (ADMIN ONLY - Requirement 5) */}
       {currentRole === 'ADMIN' && (
         <div className="bg-gradient-to-r from-[#071330] to-[#12285e] text-white rounded-2xl p-6 shadow-md border border-blue-500/30">
