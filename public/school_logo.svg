@@ -1,0 +1,390 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1120" width="800" height="1120">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@700;800&amp;display=swap');
+      .ribbon-text {
+        font-family: 'Sarabun', 'Noto Sans Thai', sans-serif;
+        font-weight: 800;
+        font-size: 40px;
+        fill: #FFFFFF;
+        letter-spacing: 2px;
+      }
+    </style>
+
+    <!-- Ray Facet Gradients -->
+    <linearGradient id="rayFacetLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF59D"/>
+      <stop offset="45%" stop-color="#FEE500"/>
+      <stop offset="100%" stop-color="#F9A825"/>
+    </linearGradient>
+    <linearGradient id="rayFacetRight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F9A825"/>
+      <stop offset="60%" stop-color="#F57F17"/>
+      <stop offset="100%" stop-color="#E65100"/>
+    </linearGradient>
+    <linearGradient id="rayBack" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FBC02D"/>
+      <stop offset="100%" stop-color="#EF6C00"/>
+    </linearGradient>
+
+    <!-- Lotus Medallion Gradient -->
+    <radialGradient id="lotusDisc" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFDE7"/>
+      <stop offset="30%" stop-color="#FFE082"/>
+      <stop offset="75%" stop-color="#FB8C00"/>
+      <stop offset="100%" stop-color="#E65100"/>
+    </radialGradient>
+
+    <!-- Roof Beam Gradients -->
+    <linearGradient id="roofWood" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8D4827"/>
+      <stop offset="40%" stop-color="#723719"/>
+      <stop offset="100%" stop-color="#55260F"/>
+    </linearGradient>
+
+    <!-- Tree Foliage Gradient -->
+    <linearGradient id="foliageGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#22C55E"/>
+      <stop offset="30%" stop-color="#16A34A"/>
+      <stop offset="70%" stop-color="#15803D"/>
+      <stop offset="100%" stop-color="#14532D"/>
+    </linearGradient>
+
+    <!-- Blue Half of Shield -->
+    <linearGradient id="shieldBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563EB"/>
+      <stop offset="35%" stop-color="#1D4ED8"/>
+      <stop offset="80%" stop-color="#1E3A8A"/>
+      <stop offset="100%" stop-color="#172554"/>
+    </linearGradient>
+
+    <!-- Yellow Half of Shield -->
+    <linearGradient id="shieldYellow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF176"/>
+      <stop offset="35%" stop-color="#FDD835"/>
+      <stop offset="80%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+
+    <!-- Ribbon Gradient -->
+    <linearGradient id="ribbonBlue" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1E40AF"/>
+      <stop offset="45%" stop-color="#1E3A8A"/>
+      <stop offset="100%" stop-color="#0F172A"/>
+    </linearGradient>
+
+    <!-- Gold Border for Ribbon -->
+    <linearGradient id="goldEdge" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="30%" stop-color="#FEF08A"/>
+      <stop offset="50%" stop-color="#F59E0B"/>
+      <stop offset="80%" stop-color="#FEF08A"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+
+    <!-- Ribbon Text Curved Path -->
+    <path id="ribbonPath" d="M 195 910 Q 400 1025 605 910" fill="none" />
+  </defs>
+
+  <!-- ==================== OUTER WHITE SILHOUETTE OUTLINE ==================== -->
+  <!-- Subtle white contour around entire emblem -->
+
+  <!-- ==================== 1. SUNBURST RAYS ==================== -->
+  <g id="sunburst">
+    <!-- Secondary recessed rays behind main rays -->
+    <g fill="url(#rayBack)">
+      <polygon points="400,250 375,120 382,75 390,125" />
+      <polygon points="400,250 410,125 418,75 425,120" />
+      <polygon points="400,250 330,140 322,95 345,150" />
+      <polygon points="400,250 455,150 478,95 470,140" />
+      <polygon points="400,250 280,180 262,140 295,190" />
+      <polygon points="400,250 505,190 538,140 520,180" />
+      <polygon points="400,250 230,230 205,195 245,245" />
+      <polygon points="400,250 555,245 595,195 570,230" />
+      <polygon points="400,250 185,295 155,265 195,315" />
+      <polygon points="400,250 605,315 645,265 615,295" />
+    </g>
+
+    <!-- 11 Primary Faceted Spearhead Rays -->
+    <!-- Center Vertical Ray (0 deg) -->
+    <g transform="translate(400, 250)">
+      <polygon points="0,0 -18,-130 0,-235 0,0" fill="url(#rayFacetLeft)" stroke="#FFFFFF" stroke-width="1.5" />
+      <polygon points="0,0 0,-235 18,-130 0,0" fill="url(#rayFacetRight)" stroke="#FFFFFF" stroke-width="1.5" />
+    </g>
+
+    <!-- Left 1 (~13.5 deg) -->
+    <g transform="translate(400, 250) rotate(-13.5)">
+      <polygon points="0,0 -18,-130 0,-232 0,0" fill="url(#rayFacetLeft)" stroke="#FFFFFF" stroke-width="1.5" />
+      <polygon points="0,0 0,-232 18,-130 0,0" fill="url(#rayFacetRight)" stroke="#FFFFFF" stroke-width="1.5" />
+    </g>
+    <!-- Right 1 (~13.5 deg) -->
+    <g transform="translate(400, 250) rotate(13.5)">
+      <polygon points="0,0 -18,-130 0,-232 0,0" fill="url(#rayFacetLeft)" stroke="#FFFFFF" stroke-width="1.5" />
+      <polygon points="0,0 0,-232 18,-130 0,0" fill="url(#rayFacetRight)" stroke="#FFFFFF" stroke-width="1.5" />
+    </g>
+
+    <!-- Left 2 (~27 deg) -->
+    <g transform="translate(400, 250) rotate(-27)">
+      <polygon points="0,0 -18,-125 0,-225 0,0" fill="url(#rayFacetLeft)" stroke="#FFFFFF" stroke-width="1.5" />
+      <polygon points="0,0 0,-225 18,-125 0,0" fill="url(#rayFacetRight)" stroke="#FFFFFF" stroke-width="1.5" />
+    </g>
+    <!-- Right 2 (~27 deg) -->
+    <g transform="translate(400, 250) rotate(27)">
+      <polygon points="0,0 -18,-125 0,-225 0,0" fill="url(#rayFacetLeft)" stroke="#FFFFFF" stroke-width="1.5" />
+      <polygon points="0,0 0,-225 18,-125 0,0" fill="url(#rayFacetRight)" stroke="#FFFFFF" stroke-width="1.5" />
+    </g>
+
+    <!-- Left 3 (~40.5 deg) -->
+    <g transform="translate(400, 250) rotate(-40.5)">
+      <polygon points="0,0 -18,-120 0,-218 0,0" fill="url(#rayFacetLeft)" stroke="#FFFFFF" stroke-width="1.5" />
+      <polygon points="0,0 0,-218 18,-120 0,0" fill="url(#rayFacetRight)" stroke="#FFFFFF" stroke-width="1.5" />
+    </g>
+    <!-- Right 3 (~40.5 deg) -->
+    <g transform="translate(400, 250) rotate(40.5)">
+      <polygon points="0,0 -18,-120 0,-218 0,0" fill="url(#rayFacetLeft)" stroke="#FFFFFF" stroke-width="1.5" />
+      <polygon points="0,0 0,-218 18,-120 0,0" fill="url(#rayFacetRight)" stroke="#FFFFFF" stroke-width="1.5" />
+    </g>
+
+    <!-- Left 4 (~54 deg) -->
+    <g transform="translate(400, 250) rotate(-54)">
+      <polygon points="0,0 -18,-115 0,-205 0,0" fill="url(#rayFacetLeft)" stroke="#FFFFFF" stroke-width="1.5" />
+      <polygon points="0,0 0,-205 18,-115 0,0" fill="url(#rayFacetRight)" stroke="#FFFFFF" stroke-width="1.5" />
+    </g>
+    <!-- Right 4 (~54 deg) -->
+    <g transform="translate(400, 250) rotate(54)">
+      <polygon points="0,0 -18,-115 0,-205 0,0" fill="url(#rayFacetLeft)" stroke="#FFFFFF" stroke-width="1.5" />
+      <polygon points="0,0 0,-205 18,-115 0,0" fill="url(#rayFacetRight)" stroke="#FFFFFF" stroke-width="1.5" />
+    </g>
+
+    <!-- Left 5 (~67.5 deg) -->
+    <g transform="translate(400, 250) rotate(-67.5)">
+      <polygon points="0,0 -18,-110 0,-190 0,0" fill="url(#rayFacetLeft)" stroke="#FFFFFF" stroke-width="1.5" />
+      <polygon points="0,0 0,-190 18,-110 0,0" fill="url(#rayFacetRight)" stroke="#FFFFFF" stroke-width="1.5" />
+    </g>
+    <!-- Right 5 (~67.5 deg) -->
+    <g transform="translate(400, 250) rotate(67.5)">
+      <polygon points="0,0 -18,-110 0,-190 0,0" fill="url(#rayFacetLeft)" stroke="#FFFFFF" stroke-width="1.5" />
+      <polygon points="0,0 0,-190 18,-110 0,0" fill="url(#rayFacetRight)" stroke="#FFFFFF" stroke-width="1.5" />
+    </g>
+  </g>
+
+  <!-- ==================== 2. GABLE ROOF & TREE ==================== -->
+  <g id="roofAndTree">
+    <!-- Pillar connecting Medallion to Gable -->
+    <polygon points="386,250 414,250 442,380 358,380" fill="url(#roofWood)" stroke="#FFFFFF" stroke-width="2" />
+
+    <!-- Tree Foliage Canopy -->
+    <g id="treeCanopy" fill="url(#foliageGrad)" stroke="#FFFFFF" stroke-width="3.5" stroke-linejoin="round">
+      <circle cx="340" cy="445" r="38" />
+      <circle cx="460" cy="445" r="38" />
+      <circle cx="320" cy="425" r="34" />
+      <circle cx="480" cy="425" r="34" />
+      <circle cx="400" cy="410" r="48" />
+      <circle cx="365" cy="390" r="36" />
+      <circle cx="435" cy="390" r="36" />
+    </g>
+
+    <!-- Tree Trunk -->
+    <path d="M 382 455 L 372 525 L 428 525 L 418 455 Z" fill="#55260F" stroke="#FFFFFF" stroke-width="2" />
+
+    <!-- Triangular Gable Roof with Upturned Finials (หางหงส์) -->
+    <path d="
+      M 400 270
+      L 548 490
+      C 565 515, 575 540, 584 578
+      C 584 550, 575 515, 568 495
+      C 560 475, 545 440, 542 425
+      C 545 435, 560 455, 575 480
+      L 550 480
+      L 400 252
+      L 250 480
+      L 225 480
+      C 240 455, 255 435, 258 425
+      C 255 440, 240 475, 232 495
+      C 225 515, 216 550, 216 578
+      C 225 540, 235 515, 252 490
+      Z
+    " fill="url(#roofWood)" stroke="#FFFFFF" stroke-width="5" stroke-linejoin="round" />
+  </g>
+
+  <!-- ==================== 3. LOTUS MEDALLION ==================== -->
+  <g id="medallion">
+    <circle cx="400" cy="250" r="34" fill="#FFFFFF" />
+    <circle cx="400" cy="250" r="30" fill="url(#lotusDisc)" stroke="#FFA000" stroke-width="2" />
+    <!-- White Lotus Flower Drawing -->
+    <g fill="#FFFFFF" stroke="#E65100" stroke-width="0.8">
+      <path d="M 400 228 C 396 237, 396 247, 400 257 C 404 247, 404 237, 400 228 Z" />
+      <path d="M 398 232 C 392 239, 390 249, 398 257 C 399 248, 401 241, 398 232 Z" />
+      <path d="M 402 232 C 408 239, 410 249, 402 257 C 401 248, 399 241, 402 232 Z" />
+      <path d="M 395 238 C 386 243, 385 252, 395 258 C 397 250, 398 244, 395 238 Z" />
+      <path d="M 405 238 C 414 243, 415 252, 405 258 C 403 250, 402 244, 405 238 Z" />
+      <path d="M 388 255 Q 400 261 412 255 Q 400 259 388 255 Z" />
+    </g>
+  </g>
+
+  <!-- ==================== 4. CENTRAL OVAL EMBLEM SHIELD (ค.ม.) ==================== -->
+  <g id="shieldEmblem">
+    <!-- Golden Arch Crescent Above Oval -->
+    <path d="M 235 600 C 235 520, 565 520, 565 600" fill="none" stroke="#FBBF24" stroke-width="6" stroke-linecap="round"/>
+
+    <!-- Golden Base / Lotus Pedestal under Shield -->
+    <g id="pedestal" fill="#F59E0B" stroke="#FFFFFF" stroke-width="2.5">
+      <path d="M 345 855 C 370 878, 430 878, 455 855 C 440 885, 360 885, 345 855 Z" />
+      <ellipse cx="400" cy="868" rx="42" ry="12" fill="#FBBF24" />
+    </g>
+
+    <!-- Left Half: Royal Blue Field -->
+    <path d="
+      M 400 525
+      C 285 525, 210 610, 210 710
+      C 210 805, 290 875, 400 875
+      Z
+    " fill="url(#shieldBlue)" stroke="#FFFFFF" stroke-width="8" stroke-linejoin="round" />
+
+    <!-- Right Half: Golden Yellow Field -->
+    <path d="
+      M 400 525
+      C 515 525, 590 610, 590 710
+      C 590 805, 510 875, 400 875
+      Z
+    " fill="url(#shieldYellow)" stroke="#FFFFFF" stroke-width="8" stroke-linejoin="round" />
+
+    <!-- Center Dividing Line -->
+    <line x1="400" y1="525" x2="400" y2="875" stroke="#FFFFFF" stroke-width="3" />
+
+    <!-- ==================== THAI CALLIGRAPHY "ค" (Left) ==================== -->
+    <g id="khorLetter">
+      <!-- Outer White Rim Contour of ค -->
+      <path d="
+        M 292 815
+        C 270 815, 255 780, 255 735
+        C 255 670, 282 620, 322 575
+        C 342 552, 368 538, 395 532
+        C 390 555, 375 580, 358 602
+        C 338 628, 328 655, 328 685
+        C 328 705, 334 725, 342 745
+        C 348 755, 355 768, 362 780
+        C 368 792, 365 815, 348 815
+        C 335 815, 326 800, 322 785
+        C 316 765, 308 745, 300 745
+        C 290 745, 280 760, 280 780
+        C 280 800, 285 815, 292 815
+        Z
+      " fill="#1E3A8A" stroke="#FFFFFF" stroke-width="11" stroke-linejoin="round" stroke-linecap="round" />
+
+      <!-- Inner Kanok Flourish Stroke on ค -->
+      <path d="
+        M 288 745
+        C 280 720, 292 675, 320 635
+        C 340 605, 365 580, 385 565
+        C 370 585, 348 615, 335 645
+        C 322 675, 318 708, 320 738
+      " fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
+
+      <!-- Swirl Head Circle of ค -->
+      <circle cx="280" cy="780" r="9" fill="#FFFFFF" />
+      <circle cx="280" cy="780" r="5" fill="#1E3A8A" />
+    </g>
+
+    <!-- ==================== THAI CALLIGRAPHY "ม" (Right) ==================== -->
+    <g id="morLetter">
+      <!-- Body of Mor with white contour -->
+      <path d="
+        M 410 550
+        C 425 578, 442 620, 442 662
+        C 442 692, 434 722, 426 752
+        C 418 782, 418 808, 432 820
+        C 448 834, 472 830, 488 806
+        C 500 785, 505 755, 505 720
+        C 505 660, 522 598, 558 548
+        C 568 532, 582 522, 585 538
+        C 582 558, 568 595, 552 635
+        C 538 675, 528 720, 528 765
+        C 528 808, 512 838, 482 850
+        C 450 862, 420 852, 404 826
+        C 394 808, 394 780, 400 750
+        C 408 720, 418 690, 418 660
+        C 418 625, 408 588, 402 560
+        Z
+      " fill="#F59E0B" stroke="#FFFFFF" stroke-width="10" stroke-linejoin="round" stroke-linecap="round" />
+
+      <!-- Inner White Swirl Curves on Mor -->
+      <path d="
+        M 432 788
+        C 442 818, 470 818, 482 788
+        C 492 758, 496 718, 506 678
+        C 516 638, 534 598, 558 565
+      " fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
+
+      <!-- Swirl Head of Mor at lower loop -->
+      <circle cx="420" cy="788" r="9" fill="#FFFFFF" />
+      <circle cx="420" cy="788" r="5" fill="#F59E0B" />
+
+      <!-- Upper Kanok Flame tip on right -->
+      <path d="
+        M 558 548
+        C 575 528, 588 538, 582 560
+        C 575 580, 562 605, 552 632
+      " fill="#F59E0B" stroke="#FFFFFF" stroke-width="3" />
+    </g>
+  </g>
+
+  <!-- ==================== 5. BOTTOM ROYAL BLUE RIBBON ==================== -->
+  <g id="bottomRibbon">
+    <!-- Swallowtail Left Wing (behind) -->
+    <polygon points="
+      95,745
+      185,690
+      195,830
+      140,845
+      95,815
+      125,780
+    " fill="#0A1E63" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round" />
+
+    <!-- Swallowtail Right Wing (behind) -->
+    <polygon points="
+      705,745
+      615,690
+      605,830
+      660,845
+      705,815
+      675,780
+    " fill="#0A1E63" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round" />
+
+    <!-- Gold trim on left & right wing tails -->
+    <polyline points="95,745 185,690" stroke="url(#goldEdge)" stroke-width="4.5" stroke-linecap="round" />
+    <polyline points="95,815 140,845 195,830" stroke="url(#goldEdge)" stroke-width="4.5" stroke-linecap="round" />
+    <polyline points="705,745 615,690" stroke="url(#goldEdge)" stroke-width="4.5" stroke-linecap="round" />
+    <polyline points="705,815 660,845 605,830" stroke="url(#goldEdge)" stroke-width="4.5" stroke-linecap="round" />
+
+    <!-- Main Curved Ribbon Body -->
+    <path d="
+      M 135,765
+      C 185,820, 275,935, 400,945
+      C 525,935, 615,820, 665,765
+      C 680,830, 575,980, 400,985
+      C 225,980, 120,830, 135,765
+      Z
+    " fill="url(#ribbonBlue)" stroke="#FFFFFF" stroke-width="5.5" stroke-linejoin="round" />
+
+    <!-- Top Gold Ribbon Border -->
+    <path d="
+      M 135,765
+      C 185,820, 275,935, 400,945
+      C 525,935, 615,820, 665,765
+    " fill="none" stroke="url(#goldEdge)" stroke-width="5" stroke-linecap="round" />
+
+    <!-- Bottom Gold Ribbon Border -->
+    <path d="
+      M 135,765
+      C 120,830, 225,980, 400,985
+      C 575,980, 680,830, 665,765
+    " fill="none" stroke="url(#goldEdge)" stroke-width="5" stroke-linecap="round" />
+
+    <!-- Inscription: โรงเรียนบ้านคูเมือง with Web Font -->
+    <g id="ribbonTextGroup">
+    <text font-family="'Sarabun', 'Noto Sans Thai', sans-serif" font-size="36" font-weight="800" fill="#FFFFFF" text-anchor="middle" letter-spacing="1px">
+      <textPath href="#ribbonPath" startOffset="50%" text-anchor="middle">โรงเรียนบ้านคูเมือง</textPath>
+    </text></g>
+  </g>
+</svg>

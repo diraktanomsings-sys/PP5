@@ -1,0 +1,6 @@
+{
+  "name": "ระบบ ปพ.5 ออนไลน์ โรงเรียนบ้านคูเมือง",
+  "description": "ระบบส่ง ตรวจสอบ และอนุมัติ ปพ.5 ออนไลน์ โรงเรียนบ้านคูเมือง สพป.สิงห์บุรี แบบดิจิทัลครบวงจร",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
