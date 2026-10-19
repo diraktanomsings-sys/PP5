@@ -11,6 +11,7 @@ import type {
 import type { Person, Snapshot, SessionPayload, PurgePreview } from '../production/types';
 import { api, fileUrl, uploadFile, RequestError } from '../production/api';
 import schoolLogo from '../assets/schoolLogo';
+import { DocumentPreviewCache } from '../lib/document-preview-cache';
 
 const anonymous: User = {
   id: '',
@@ -71,7 +72,44 @@ function useServerApp() {
   const generation = useRef(0);
   const current = useRef(snapshot);
   current.current = snapshot;
+  const documentPreviews = useRef(new DocumentPreviewCache());
+  useEffect(() => () => documentPreviews.current.clear(), []);
+  const readDocument = useCallback(async (url: string) => {
+    const s = current.current;
+    if (!s) throw new Error('กรุณาเข้าสู่ระบบก่อนเปิดเอกสาร');
+    const target = new URL(url, window.location.origin);
+    const id = target.searchParams.get('id');
+    const file = s.submissions
+      .flatMap((sub) =>
+        sub.versions.flatMap((v) => [
+          v.pdf,
+          v.excel,
+          ...(v.review?.annotated ? [v.review.annotated] : []),
+        ]),
+      )
+      .find((f) => f.id === id);
+    if (
+      target.origin !== window.location.origin ||
+      target.pathname !== '/api/pp5' ||
+      target.searchParams.get('action') !== 'file' ||
+      !file
+    )
+      throw new Error('ไม่พบเอกสารในรายการที่คุณมีสิทธิ์');
+    return documentPreviews.current.read(
+      `${s.user.id}:${s.role}`,
+      `${file.id}:${file.sha256}`,
+      async (signal) => {
+        const res = await fetch(target, { credentials: 'same-origin', signal });
+        if (!res.ok)
+          throw new RequestError(res.status, 'เปิดเอกสารไม่สำเร็จ กรุณารีเฟรชข้อมูลหรือลองใหม่');
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        if (bytes.byteLength !== file.size) throw new Error('เอกสารโหลดไม่ครบ กรุณาลองใหม่');
+        return bytes;
+      },
+    );
+  }, []);
   const refresh = async (role?: UserRole, navigate = false) => {
+    documentPreviews.current.clear();
     const finishWaiting = beginWait('กำลังโหลดข้อมูลระบบ…');
     const sequence = ++generation.current;
     try {
@@ -259,6 +297,7 @@ function useServerApp() {
   };
   const logout = () =>
     action(async () => {
+      documentPreviews.current.clear();
       await api('logout', {});
       ++generation.current;
       setSnapshot(undefined);
@@ -331,6 +370,7 @@ function useServerApp() {
     });
   const changePassword = async (_id: string, current: string, password: string) => {
     const success = await action(async () => {
+      documentPreviews.current.clear();
       await api('password', { current, password });
       ++generation.current;
       setSnapshot(undefined);
@@ -353,6 +393,7 @@ function useServerApp() {
       setTimeout(() => URL.revokeObjectURL(blob), 1000);
     }, 'กำลังเตรียมไฟล์ดาวน์โหลด…');
   return {
+    readDocument,
     currentUser,
     currentRole,
     users,

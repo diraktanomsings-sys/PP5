@@ -173,8 +173,10 @@ export function createHttp(
         }
         if (action === 'file') {
           const file = await service.accessibleFile(token(req), role(req), String(req.query.id));
+          const authorized = performance.now();
           const stream = await storage.read(file);
           res.set({
+            'Server-Timing': `auth;dur=${(authorized - started).toFixed(1)}, storage;dur=${(performance.now() - authorized).toFixed(1)}`,
             'Content-Type': mime(file.kind),
             'Content-Length': String(file.size),
             'Content-Disposition': disposition(file.name, req.query.inline === '1'),

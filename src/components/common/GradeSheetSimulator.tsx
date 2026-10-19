@@ -34,6 +34,7 @@ export function GradeSheetSimulator({
     downloadSigned,
     mutate,
     driveStorage,
+    readDocument,
   } = useApp();
   const [tab, setTab] = useState<string>('pdf');
   const [versionIndex, setVersionIndex] = useState(0);
@@ -60,10 +61,9 @@ export function GradeSheetSimulator({
     if (excelRead.current?.url !== v.excel_file_url) {
       const url = v.excel_file_url;
       const result = (async () => {
-        const res = await fetch(url, { credentials: 'same-origin' });
-        if (!res.ok) throw new Error('เปิด Excel ไม่สำเร็จ');
+        const bytes = await readDocument(url);
         const { readWorkbook } = await import('../../lib/workbook');
-        return readWorkbook(new Uint8Array(await res.arrayBuffer()));
+        return readWorkbook(bytes);
       })();
       excelRead.current = { url, result };
     }
@@ -158,9 +158,9 @@ export function GradeSheetSimulator({
       </div>
       <div className="p-4 sm:p-5">
         <div hidden={tab !== 'pdf'}>
-          <React.Suspense fallback={<LoadingOverlay message="กำลังเปิด PDF…" />}>
+          <React.Suspense fallback={<LoadingOverlay inline message="กำลังเปิด PDF…" />}>
             <div className="pp5-pdf">
-              <PdfPreview url={v.pdf_file_url + '&inline=1'} />
+              <PdfPreview url={v.pdf_file_url + '&inline=1'} readDocument={readDocument} />
             </div>
           </React.Suspense>
         </div>
@@ -170,7 +170,7 @@ export function GradeSheetSimulator({
               แสดงค่าที่บันทึกไว้ใน Excel โดยไม่คำนวณสูตรใหม่ แสดงตัวอย่างสูงสุด 500 แถวต่อชีต
               ดาวน์โหลดต้นฉบับเพื่อตรวจสูตรและรูปแบบทั้งหมด
             </p>
-            {loading && <LoadingOverlay message="กำลังอ่านไฟล์ Excel…" />}
+            {loading && <LoadingOverlay inline message="กำลังอ่านไฟล์ Excel…" />}
             {error && (
               <p role="alert" className="text-red-700">
                 {error}
