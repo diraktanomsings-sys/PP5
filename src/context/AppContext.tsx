@@ -213,7 +213,7 @@ function useServerApp() {
         pdf_file_name: v.pdf.name,
         submitted_by: v.submittedBy,
         submitted_at: v.submittedAt,
-        reviewer_notes: v.review?.notes || v.notes,
+        reviewer_notes: v.review?.notes,
         reviewed_by: v.review?.by,
         drive_file_url: v.driveUrl,
         findings: v.findings,
