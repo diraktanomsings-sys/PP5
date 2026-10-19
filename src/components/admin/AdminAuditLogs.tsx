@@ -59,7 +59,7 @@ export const AdminAuditLogs: React.FC = () => {
           bg: 'bg-purple-100 text-purple-800 border-purple-200',
           label: 'ครูส่งไฟล์ (Submit)',
         };
-      case 'DEADLINE_EXTENDED':
+      case 'DEADLINE_CHANGED':
         return {
           bg: 'bg-amber-100 text-amber-900 border-amber-300',
           label: 'ขยายเวลา Deadline',
@@ -67,7 +67,7 @@ export const AdminAuditLogs: React.FC = () => {
       case 'EMERGENCY_UNLOCKED':
         return {
           bg: 'bg-rose-200 text-rose-950 border-rose-400',
-          label: 'ปลดล็อกฉุกเฉิน (Emergency 2FA)',
+          label: 'ปลดล็อกฉุกเฉิน (Emergency Unlock)',
         };
       case 'REVIEWER_ASSIGNED':
         return {
@@ -83,10 +83,27 @@ export const AdminAuditLogs: React.FC = () => {
   };
 
   const handleExport = (type: 'ITA' | 'PDPA') => {
-    setExportNotice(
-      `ส่งออกบันทึกประวัติ Audit Logs ตามมาตรฐาน ${type} (JSON/CSV) สำเร็จ! พร้อมส่งผู้ตรวจการ`
+    const blob = new Blob(
+      [
+        JSON.stringify(
+          {
+            exportedAt: new Date().toISOString(),
+            scope: 'รายการล่าสุดที่โหลดและกรองบนหน้าจอ',
+            records: filteredLogs,
+          },
+          null,
+          2,
+        ),
+      ],
+      { type: 'application/json;charset=utf-8' },
     );
-    setTimeout(() => setExportNotice(null), 4000);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `PP5-audit-${type}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setExportNotice(`ส่งออกข้อมูลจริงที่กรองบนหน้าจอ ${filteredLogs.length} รายการแล้ว`);
   };
 
   return (
@@ -96,13 +113,13 @@ export const AdminAuditLogs: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full w-fit border border-slate-200">
             <Lock className="w-3.5 h-3.5 text-slate-600" />
-            <span>Immutable Ledger · ไม่สามารถลบหรือดัดแปลงประวัติได้</span>
+            <span>ประวัติจากเซิร์ฟเวอร์ · ผู้ใช้ทั่วไปแก้ไขย้อนหลังไม่ได้</span>
           </div>
           <h2 className="text-xl font-bold text-slate-900 mt-2">
             บันทึกประวัติระบบ (Audit Logs & Governance Ledger)
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            ติดตามทุกการกระทำในระบบ ปพ.5 พร้อม IP Address และวันเวลา สำหรับการตรวจสอบ ITA & PDPA
+            ตรวจสอบประวัติบนเซิร์ฟเวอร์ 200 รายการล่าสุด พร้อมผู้ดำเนินการและเวลา
           </p>
         </div>
 
@@ -112,14 +129,14 @@ export const AdminAuditLogs: React.FC = () => {
             className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>รายงานเกณฑ์ ITA</span>
+            <span>ส่งออกประวัติ JSON</span>
           </button>
           <button
             onClick={() => handleExport('PDPA')}
             className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
           >
             <Shield className="w-3.5 h-3.5" />
-            <span>รายงานเกณฑ์ PDPA</span>
+            <span>ส่งออกผลกรอง JSON</span>
           </button>
         </div>
       </div>
@@ -146,8 +163,8 @@ export const AdminAuditLogs: React.FC = () => {
             <option value="REVIEW_REJECTED">ผู้ตรวจส่งกลับแก้ไข</option>
             <option value="SUBMISSION_CREATED">ส่งเอกสารใหม่</option>
             <option value="REVISION_SUBMITTED">ส่งเอกสารแก้ไข</option>
-            <option value="DEADLINE_EXTENDED">ขยายเวลา Deadline</option>
-            <option value="EMERGENCY_UNLOCKED">ปลดล็อกฉุกเฉิน (2FA)</option>
+            <option value="DEADLINE_CHANGED">ขยายเวลา Deadline</option>
+            <option value="EMERGENCY_UNLOCKED">ปลดล็อกฉุกเฉิน (ยืนยันรหัสผ่าน)</option>
             <option value="REVIEWER_ASSIGNED">มอบหมายผู้ตรวจ</option>
           </select>
         </div>

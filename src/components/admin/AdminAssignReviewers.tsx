@@ -23,12 +23,12 @@ export const AdminAssignReviewers: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [alertNotice, setAlertNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(
-    null
+    null,
   );
 
   const reviewers = users.filter((u) => {
     const roles = u.assigned_roles && u.assigned_roles.length > 0 ? u.assigned_roles : [u.role];
-    return roles.includes('REVIEWER') || roles.includes('ADMIN');
+    return u.is_active && roles.includes('REVIEWER');
   });
 
   // Count workload per reviewer
@@ -37,12 +37,12 @@ export const AdminAssignReviewers: React.FC = () => {
     return { reviewer: rev, count };
   });
 
-  const handleReviewerChange = (courseId: string, newReviewerId: string) => {
-    const res = assignReviewerWithCheck(courseId, newReviewerId, 'DEPARTMENT');
+  const handleReviewerChange = async (courseId: string, newReviewerId: string) => {
+    const res = await assignReviewerWithCheck(courseId, newReviewerId, 'DEPARTMENT');
     if (!res.success) {
       setAlertNotice({
         type: 'error',
-        msg: res.error || 'ไม่สามารถมอบหมายได้',
+        msg: 'ไม่สามารถมอบหมายได้ กรุณาตรวจสอบสิทธิ์และข้อความแจ้งข้อผิดพลาด',
       });
     } else {
       setAlertNotice({
@@ -53,41 +53,34 @@ export const AdminAssignReviewers: React.FC = () => {
     setTimeout(() => setAlertNotice(null), 4000);
   };
 
-  // AI Auto-Balance Workload algorithm
-  const handleAutoBalanceWorkload = () => {
-    // Distribute courses among reviewers fairly without self-review
-    const newAssignments = courses.map((course) => {
-      // Find eligible reviewers where reviewer.id !== course.teacher_id
-      const eligible = reviewers.filter((r) => r.id !== course.teacher_id);
-      // Pick reviewer with currently lowest count
-      const chosen = eligible[Math.floor(Math.random() * eligible.length)] || reviewers[0];
-
-      return {
-        id: `ra-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+  // Auto-Balance Workload algorithm
+  const handleAutoBalanceWorkload = async () => {
+    const counts = new Map(reviewers.map((r) => [r.id, 0]));
+    const rows = [];
+    for (const course of courses.filter((c) => c.term_id === activeTerm.id)) {
+      const eligible = reviewers
+        .filter((r) => r.id !== course.teacher_id)
+        .sort((a, b) => counts.get(a.id)! - counts.get(b.id)! || a.id.localeCompare(b.id));
+      const chosen = eligible[0];
+      if (!chosen) {
+        setAlertNotice({
+          type: 'error',
+          msg: 'ไม่มีผู้ตรวจที่ไม่ใช่ผู้สอนสำหรับ ' + course.course_code,
+        });
+        return;
+      }
+      counts.set(chosen.id, counts.get(chosen.id)! + 1);
+      rows.push({
+        id: course.id,
         term_id: activeTerm.id,
         reviewer_id: chosen.id,
         course_id: course.id,
         assignment_type: 'DEPARTMENT' as const,
         created_at: new Date().toISOString(),
-      };
-    });
-
-    setAssignments(newAssignments);
-    addAuditLog({
-      action_type: 'REVIEWER_ASSIGNED',
-      target_id: 'auto_balance',
-      target_name: 'AI Auto-Balance เกลี่ยภาระงานผู้ตรวจ',
-      details: {
-        total_courses_balanced: courses.length,
-        four_eyes_enforced: true,
-      },
-    });
-
-    setAlertNotice({
-      type: 'success',
-      msg: 'AI Auto-Balance: เกลี่ยภาระงานผู้ตรวจเท่ากันทุกคนเรียบร้อย และตรวจไม่พบผลประโยชน์ทับซ้อน 100%!',
-    });
-    setTimeout(() => setAlertNotice(null), 4000);
+      });
+    }
+    if (await setAssignments(rows))
+      setAlertNotice({ type: 'success', msg: 'จัดสรรผู้ตรวจตามภาระงานและบันทึกเรียบร้อยแล้ว' });
   };
 
   return (
@@ -113,7 +106,7 @@ export const AdminAssignReviewers: React.FC = () => {
             className="px-4 py-2.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer"
           >
             <Sparkles className="w-4 h-4 text-amber-300" />
-            <span>AI Auto-Balance เกลี่ยภาระงานผู้ตรวจ</span>
+            <span>Auto-Balance เกลี่ยภาระงานผู้ตรวจ</span>
           </button>
         </div>
       </div>
@@ -201,7 +194,7 @@ export const AdminAssignReviewers: React.FC = () => {
                   (c) =>
                     !searchQuery ||
                     c.course_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    c.course_name.toLowerCase().includes(searchQuery.toLowerCase())
+                    c.course_name.toLowerCase().includes(searchQuery.toLowerCase()),
                 )
                 .map((course) => {
                   const teacher = users.find((u) => u.id === course.teacher_id);
@@ -220,14 +213,18 @@ export const AdminAssignReviewers: React.FC = () => {
                       </td>
                       <td className="px-4 py-3.5 font-medium text-slate-800">
                         <div>{course.course_name}</div>
-                        <div className="text-[11px] text-slate-400">กลุ่มสาระ{course.department}</div>
+                        <div className="text-[11px] text-slate-400">
+                          กลุ่มสาระ{course.department}
+                        </div>
                       </td>
                       <td className="px-4 py-3.5 text-center font-mono font-medium text-slate-700">
                         {course.grade_level}
                       </td>
                       <td className="px-4 py-3.5 text-slate-700">
                         <div className="font-semibold">{teacher?.full_name}</div>
-                        <div className="text-[10px] text-slate-400 font-mono">ครูผู้สอนประจำวิชา</div>
+                        <div className="text-[10px] text-slate-400 font-mono">
+                          ครูผู้สอนประจำวิชา
+                        </div>
                       </td>
                       <td className="px-4 py-3.5">
                         <select

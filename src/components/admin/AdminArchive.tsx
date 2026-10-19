@@ -31,6 +31,8 @@ import {
 export const AdminArchive: React.FC = () => {
   const {
     courses,
+    download,
+    downloadArchive,
     submissions,
     emergencyUnlock,
     activeTerm,
@@ -57,7 +59,7 @@ export const AdminArchive: React.FC = () => {
   const [unlockModalOpen, setUnlockModalOpen] = useState(false);
   const [selectedSubToUnlock, setSelectedSubToUnlock] = useState<string | null>(null);
   const [unlockReason, setUnlockReason] = useState('');
-  const [twoFactorToken, setTwoFactorToken] = useState('ADMIN-2FA-SINGBURI');
+  const [twoFactorToken, setTwoFactorToken] = useState('');
   const [unlockError, setUnlockError] = useState<string | null>(null);
 
   // Certificate Modal state
@@ -71,77 +73,38 @@ export const AdminArchive: React.FC = () => {
     return years;
   }, [academicTerms]);
 
-  // Trigger simulated file download
-  const triggerFileDownload = (fileName: string, contentType: string = 'text/plain') => {
-    try {
-      const blob = new Blob([`โรงเรียนบ้านคูเมือง สพป.สิงห์บุรี\nเอกสารผลการเรียน ปพ.5: ${fileName}\nดาวน์โหลดจากคลังถาวร`], {
-        type: contentType,
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch {
-      // Fallback
+  const handleDownloadSingleFile = async (url: string, fileName: string) => {
+    if (await download(url, fileName)) setDownloadSuccessMsg('ดาวน์โหลดไฟล์ต้นฉบับเรียบร้อยแล้ว');
+  };
+
+  const handleDownloadZip = async (scope: 'TERM' | 'YEAR' | 'GRADE' | 'ALL', label?: string) => {
+    const filters: Record<string, string> = {};
+    if (scope !== 'ALL') {
+      if (selectedTermId !== 'ALL') filters.termId = selectedTermId;
+      else if (selectedYear !== 'ALL') filters.year = selectedYear;
+      if (selectedGrade !== 'ALL') filters.grade = selectedGrade;
     }
+    if (scope === 'TERM' && selectedTermId !== 'ALL') filters.termId = selectedTermId;
+    else if (scope === 'YEAR' && selectedYear !== 'ALL') filters.year = selectedYear;
+    else if (scope === 'GRADE' && (label || selectedGrade) !== 'ALL')
+      filters.grade = label || selectedGrade;
+    if (await downloadArchive(filters))
+      setDownloadSuccessMsg('ดาวน์โหลด ZIP จากไฟล์ต้นฉบับเรียบร้อยแล้ว');
   };
 
-  const handleDownloadSingleFile = (
-    fileName: string,
-    fileType: 'EXCEL' | 'PDF',
-    courseCode: string
-  ) => {
-    const ext = fileType === 'EXCEL' ? 'xlsx' : 'pdf';
-    const mime = fileType === 'EXCEL' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/pdf';
-    const finalName = fileName.endsWith(`.${ext}`) ? fileName : `${fileName}.${ext}`;
-    triggerFileDownload(finalName, mime);
-    setDownloadSuccessMsg(`ดาวน์โหลดไฟล์ ${finalName} (${courseCode}) เรียบร้อยแล้ว`);
-    setTimeout(() => setDownloadSuccessMsg(null), 3500);
-  };
-
-  const handleDownloadZip = (scope: 'TERM' | 'YEAR' | 'GRADE' | 'ALL', label?: string) => {
-    let zipName = 'ปพ5_รวมทั้งหมด_บ้านคูเมือง.zip';
-    let message = 'กำลังสร้างและดาวน์โหลดไฟล์ ZIP รวมเอกสาร ปพ.5 ทั้งหมด...';
-
-    if (scope === 'TERM') {
-      const termObj = academicTerms.find((t) => t.id === selectedTermId);
-      const termLabel = termObj ? `ปี${termObj.year}_เทอม${termObj.semester}` : 'ภาคเรียน';
-      zipName = `ปพ5_รวมรายเทอม_${termLabel}_บ้านคูเมือง.zip`;
-      message = `ดาวน์โหลดไฟล์ ZIP ปพ.5 รวมประจำภาคเรียน (${termObj ? `ปีการศึกษา ${termObj.year} เทอม ${termObj.semester}` : ''}) สำเร็จ!`;
-    } else if (scope === 'YEAR') {
-      zipName = `ปพ5_รวมรายปีการศึกษา_${selectedYear}_บ้านคูเมือง.zip`;
-      message = `ดาวน์โหลดไฟล์ ZIP ปพ.5 รวมทุกวิชาตลอดปีการศึกษา ${selectedYear} สำเร็จ!`;
-    } else if (scope === 'GRADE') {
-      zipName = `ปพ5_รวมสายชั้น_${label || selectedGrade}_บ้านคูเมือง.zip`;
-      message = `ดาวน์โหลดไฟล์ ZIP ปพ.5 รวมของสายชั้น ${label || selectedGrade} สำเร็จ!`;
-    }
-
-    triggerFileDownload(zipName, 'application/zip');
-    setDownloadSuccessMsg(message);
-    setTimeout(() => setDownloadSuccessMsg(null), 3500);
-  };
-
-  const handleEmergencyUnlockSubmit = (e: React.FormEvent) => {
+  const handleEmergencyUnlockSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSubToUnlock) return;
-
-    const ok = emergencyUnlock(selectedSubToUnlock, unlockReason, twoFactorToken);
-    if (!ok) {
-      setUnlockError(
-        'รหัสผ่าน 2-Factor Authentication ไม่ถูกต้อง (กรุณาใช้: ADMIN-2FA-SINGBURI หรือรหัสผ่านแอดมิน)'
-      );
-    } else {
-      setUnlockModalOpen(false);
-      setDownloadSuccessMsg('ปลดล็อกเอกสารสำเร็จ (Emergency Unlock)! บันทึกเข้าสู่ Audit Trail เรียบร้อย');
-      setSelectedSubToUnlock(null);
-      setUnlockReason('');
-      setUnlockError(null);
-      setTimeout(() => setDownloadSuccessMsg(null), 3500);
+    if (!(await emergencyUnlock(selectedSubToUnlock, unlockReason, twoFactorToken))) {
+      setUnlockError('ปลดล็อกไม่สำเร็จ กรุณาตรวจรหัสผ่านและข้อความแจ้งข้อผิดพลาด');
+      return;
     }
+    setUnlockModalOpen(false);
+    setSelectedSubToUnlock(null);
+    setUnlockReason('');
+    setTwoFactorToken('');
+    setUnlockError(null);
+    setDownloadSuccessMsg('ปลดล็อกเพื่อส่งเวอร์ชันใหม่แล้ว พร้อมเก็บหลักฐานอนุมัติเดิมในประวัติ');
   };
 
   // Filtered Submissions Logic
@@ -152,7 +115,8 @@ export const AdminArchive: React.FC = () => {
         const course = courses.find((c) => c.id === s.course_id);
         const term = academicTerms.find((t) => t.id === course?.term_id);
         const teacher = users.find((u) => u.id === course?.teacher_id);
-        const latestVer = s.versions && s.versions.length > 0 ? s.versions[s.versions.length - 1] : null;
+        const latestVer =
+          s.versions && s.versions.length > 0 ? s.versions[s.versions.length - 1] : null;
         return {
           submission: s,
           course,
@@ -193,27 +157,31 @@ export const AdminArchive: React.FC = () => {
 
         return true;
       });
-  }, [submissions, courses, academicTerms, users, selectedTermId, selectedYear, selectedGrade, searchQuery]);
+  }, [
+    submissions,
+    courses,
+    academicTerms,
+    users,
+    selectedTermId,
+    selectedYear,
+    selectedGrade,
+    searchQuery,
+  ]);
 
   // Stats calculation
   const totalLockedCourses = filteredSubmissions.length;
-  const averageGpa =
-    totalLockedCourses > 0
-      ? (
-          filteredSubmissions.reduce((acc, curr) => acc + curr.submission.average_gpa, 0) /
-          totalLockedCourses
-        ).toFixed(2)
-      : '0.00';
-
-  const averageAttendance =
-    totalLockedCourses > 0
-      ? (
-          filteredSubmissions.reduce(
-            (acc, curr) => acc + (curr.submission.average_attendance_percentage || 95),
-            0
-          ) / totalLockedCourses
-        ).toFixed(1)
-      : '0.0';
+  const mean = (values: number[], digits: number) => {
+    const known = values.filter(Number.isFinite);
+    return known.length ? (known.reduce((a, b) => a + b, 0) / known.length).toFixed(digits) : '—';
+  };
+  const averageGpa = mean(
+    filteredSubmissions.map((i) => i.submission.average_gpa),
+    2,
+  );
+  const averageAttendance = mean(
+    filteredSubmissions.map((i) => i.submission.average_attendance_percentage),
+    1,
+  );
 
   // Completion per grade (based on currently selected term/year)
   const gradeStats = gradeLevels.map((lvl) => {
@@ -255,7 +223,8 @@ export const AdminArchive: React.FC = () => {
             คลัง ปพ.5 รายเทอม / รายปีการศึกษาย้อนหลัง
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            สืบค้นและดาวน์โหลดไฟล์ ปพ.5 (Excel & PDF) ย้อนหลังได้ทุกปีการศึกษาและทุกภาคเรียน แม้ว่าจะผ่านมาแล้ว
+            สืบค้นและดาวน์โหลดไฟล์ ปพ.5 (Excel & PDF) ย้อนหลังได้ทุกปีการศึกษาและทุกภาคเรียน
+            แม้ว่าจะผ่านมาแล้ว
           </p>
         </div>
 
@@ -325,7 +294,8 @@ export const AdminArchive: React.FC = () => {
 
             <div className="flex flex-wrap items-center gap-2.5 shrink-0">
               <a
-                href={organizationDriveUrl}
+                href={organizationDriveUrl || undefined}
+                aria-disabled={!organizationDriveUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-900 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
@@ -363,10 +333,10 @@ export const AdminArchive: React.FC = () => {
           {/* Inline URL Editor */}
           {isEditingDriveUrl && (
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
                 if (tempDriveUrl.trim()) {
-                  updateOrganizationDriveUrl(tempDriveUrl.trim());
+                  if (!(await updateOrganizationDriveUrl(tempDriveUrl.trim()))) return;
                   setIsEditingDriveUrl(false);
                   setDownloadSuccessMsg('ปรับปรุง URL โฟลเดอร์ Google Drive องค์กรสำเร็จ');
                   setTimeout(() => setDownloadSuccessMsg(null), 3000);
@@ -405,7 +375,8 @@ export const AdminArchive: React.FC = () => {
                 เลือกปีการศึกษา และภาคเรียนที่ต้องการดาวน์โหลด (Term & Year Filter)
               </h3>
               <p className="text-[11px] text-slate-500">
-                สามารถเลือกดูและดาวน์โหลดเอกสาร ปพ.5 ได้ทั้งภาคเรียนปัจจุบัน และภาคเรียนย้อนหลังที่ล็อกเล่มแล้ว
+                สามารถเลือกดูและดาวน์โหลดเอกสาร ปพ.5 ได้ทั้งภาคเรียนปัจจุบัน
+                และภาคเรียนย้อนหลังที่ล็อกเล่มแล้ว
               </p>
             </div>
           </div>
@@ -439,7 +410,8 @@ export const AdminArchive: React.FC = () => {
               <option value="ALL">ทุกภาคเรียน (รวมทั้งปัจจุบันและย้อนหลัง)</option>
               {academicTerms.map((t) => (
                 <option key={t.id} value={t.id}>
-                  ปี {t.year} / ภาคเรียนที่ {t.semester} {t.is_active ? '★ (เทอมปัจจุบัน)' : '(ย้อนหลัง)'}
+                  ปี {t.year} / ภาคเรียนที่ {t.semester}{' '}
+                  {t.is_active ? '★ (เทอมปัจจุบัน)' : '(ย้อนหลัง)'}
                 </option>
               ))}
             </select>
@@ -521,8 +493,8 @@ export const AdminArchive: React.FC = () => {
               {selectedTermId !== 'ALL'
                 ? `ปี ${currentSelectedTermObj?.year} / เทอม ${currentSelectedTermObj?.semester}`
                 : selectedYear !== 'ALL'
-                ? `ปีการศึกษา ${selectedYear} (ทั้งปี)`
-                : 'ทุกปีการศึกษา / ทุกภาคเรียน'}
+                  ? `ปีการศึกษา ${selectedYear} (ทั้งปี)`
+                  : 'ทุกปีการศึกษา / ทุกภาคเรียน'}
             </span>
             {selectedGrade !== 'ALL' && (
               <span className="font-bold text-blue-900 bg-white px-2 py-0.5 rounded border border-blue-200 font-mono">
@@ -535,9 +507,14 @@ export const AdminArchive: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3 text-[11px] text-slate-600">
-            <span>เกรดเฉลี่ยรวม: <strong className="text-emerald-800 font-mono">{averageGpa}</strong></span>
+            <span>
+              เกรดเฉลี่ยรวม: <strong className="text-emerald-800 font-mono">{averageGpa}</strong>
+            </span>
             <span>·</span>
-            <span>การเข้าเรียนเฉลี่ย: <strong className="text-blue-800 font-mono">{averageAttendance}%</strong></span>
+            <span>
+              การเข้าเรียนเฉลี่ย:{' '}
+              <strong className="text-blue-800 font-mono">{averageAttendance}%</strong>
+            </span>
           </div>
         </div>
       </div>
@@ -546,7 +523,13 @@ export const AdminArchive: React.FC = () => {
       <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-            ความพร้อมของเอกสารรายสายชั้น ({selectedTermId !== 'ALL' ? `ปี ${currentSelectedTermObj?.year}/${currentSelectedTermObj?.semester}` : selectedYear !== 'ALL' ? `ปี ${selectedYear}` : 'รวมทุกเทอม'})
+            ความพร้อมของเอกสารรายสายชั้น (
+            {selectedTermId !== 'ALL'
+              ? `ปี ${currentSelectedTermObj?.year}/${currentSelectedTermObj?.semester}`
+              : selectedYear !== 'ALL'
+                ? `ปี ${selectedYear}`
+                : 'รวมทุกเทอม'}
+            )
           </h3>
           <span className="text-[11px] text-slate-400">
             คลิกสายชั้นเพื่อกรองและดาวน์โหลดเฉพาะกลุ่มได้ทันที
@@ -570,8 +553,8 @@ export const AdminArchive: React.FC = () => {
                   st.percent === 100
                     ? 'text-emerald-700'
                     : st.percent > 0
-                    ? 'text-blue-700'
-                    : 'text-slate-400'
+                      ? 'text-blue-700'
+                      : 'text-slate-400'
                 }`}
               >
                 {st.percent.toFixed(0)}%
@@ -600,7 +583,9 @@ export const AdminArchive: React.FC = () => {
           {filteredSubmissions.length > 0 && (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => handleDownloadZip('GRADE', selectedGrade !== 'ALL' ? selectedGrade : undefined)}
+                onClick={() =>
+                  handleDownloadZip('GRADE', selectedGrade !== 'ALL' ? selectedGrade : undefined)
+                }
                 className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
                 title="ดาวน์โหลดไฟล์ที่กำลังแสดงผลเป็น ZIP รวม"
               >
@@ -631,7 +616,9 @@ export const AdminArchive: React.FC = () => {
                 <tr>
                   <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
                     <Archive className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                    <p className="font-semibold text-slate-600 text-sm">ไม่พบเอกสาร ปพ.5 ตามเงื่อนไขที่เลือก</p>
+                    <p className="font-semibold text-slate-600 text-sm">
+                      ไม่พบเอกสาร ปพ.5 ตามเงื่อนไขที่เลือก
+                    </p>
                     <p className="text-xs text-slate-400 mt-1">
                       ลองเปลี่ยนปีการศึกษา ภาคเรียน หรือล้างคำค้นหาเพื่อดูข้อมูลทั้งหมด
                     </p>
@@ -640,8 +627,12 @@ export const AdminArchive: React.FC = () => {
               ) : (
                 filteredSubmissions.map(({ submission, course, term, teacher, latestVer }) => {
                   if (!course) return null;
-                  const excelName = latestVer?.excel_file_name || `ปพ5_${term?.year || 2568}_${term?.semester || 1}_${course.course_code}.xlsx`;
-                  const pdfName = latestVer?.pdf_file_name || `ปพ5_${term?.year || 2568}_${term?.semester || 1}_${course.course_code}.pdf`;
+                  const excelName =
+                    latestVer?.excel_file_name ||
+                    `ปพ5_${term?.year || 2568}_${term?.semester || 1}_${course.course_code}.xlsx`;
+                  const pdfName =
+                    latestVer?.pdf_file_name ||
+                    `ปพ5_${term?.year || 2568}_${term?.semester || 1}_${course.course_code}.pdf`;
 
                   return (
                     <tr key={submission.id} className="hover:bg-slate-50/80 transition-colors">
@@ -665,7 +656,9 @@ export const AdminArchive: React.FC = () => {
                       {/* Course Name */}
                       <td className="px-4 py-3.5 font-medium text-slate-800">
                         <div>{course.course_name}</div>
-                        <div className="text-[10px] text-slate-400 font-normal">{course.department}</div>
+                        <div className="text-[10px] text-slate-400 font-normal">
+                          {course.department}
+                        </div>
                       </td>
 
                       {/* Grade Level */}
@@ -680,7 +673,9 @@ export const AdminArchive: React.FC = () => {
 
                       {/* GPA */}
                       <td className="px-4 py-3.5 text-center font-mono font-bold text-emerald-800 whitespace-nowrap">
-                        {submission.average_gpa.toFixed(2)}
+                        {Number.isFinite(submission.average_gpa)
+                          ? submission.average_gpa.toFixed(2)
+                          : '—'}
                       </td>
 
                       {/* Hash */}
@@ -708,7 +703,7 @@ export const AdminArchive: React.FC = () => {
                           {/* 1. Download Excel */}
                           <button
                             onClick={() =>
-                              handleDownloadSingleFile(excelName, 'EXCEL', course.course_code)
+                              handleDownloadSingleFile(latestVer!.excel_file_url, excelName)
                             }
                             className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
                             title={`ดาวน์โหลดไฟล์ Excel: ${excelName}`}
@@ -720,7 +715,7 @@ export const AdminArchive: React.FC = () => {
                           {/* 2. Download PDF */}
                           <button
                             onClick={() =>
-                              handleDownloadSingleFile(pdfName, 'PDF', course.course_code)
+                              handleDownloadSingleFile(latestVer!.pdf_file_url, pdfName)
                             }
                             className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-lg text-xs font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
                             title={`ดาวน์โหลดไฟล์ PDF: ${pdfName}`}
@@ -746,7 +741,7 @@ export const AdminArchive: React.FC = () => {
                                 setUnlockModalOpen(true);
                               }}
                               className="px-2 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold inline-flex items-center gap-1 cursor-pointer"
-                              title="ปลดล็อกฉุกเฉินด้วย 2FA (Admin Only)"
+                              title="ปลดล็อกฉุกเฉินด้วยรหัสผ่าน (Admin Only)"
                             >
                               <Unlock className="w-3 h-3" />
                               <span className="hidden sm:inline">ปลดล็อก</span>
@@ -781,8 +776,10 @@ export const AdminArchive: React.FC = () => {
             </div>
 
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800">
-              <span className="font-bold">คำเตือนทางกฎระเบียบ:</span>{' '}
-              เอกสารที่ Final Locked แล้ว ได้รับการลงนามและสร้าง Digital Hash แล้ว การปลดล็อกต้องมีเหตุผลจำเป็นอย่างยิ่งและต้องยืนยันด้วย 2-Factor Authentication ของ Admin ซึ่งจะถูกบันทึกใน Audit Ledger อย่างถาวร
+              <span className="font-bold">คำเตือนทางกฎระเบียบ:</span> เอกสารที่ Final Locked แล้ว
+              ได้รับการลงนามและสร้าง Digital Hash แล้ว
+              การปลดล็อกต้องมีเหตุผลจำเป็นอย่างยิ่งและต้องยืนยันด้วย รหัสผ่านบัญชีผู้ดูแล
+              ซึ่งจะถูกบันทึกใน Audit Ledger อย่างถาวร
             </div>
 
             {unlockError && (
@@ -809,7 +806,7 @@ export const AdminArchive: React.FC = () => {
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  รหัสผ่าน 2-Factor Authentication (Admin Security Token) *
+                  รหัสผ่านบัญชีผู้ดูแลปัจจุบัน *
                 </label>
                 <div className="relative">
                   <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -818,12 +815,12 @@ export const AdminArchive: React.FC = () => {
                     required
                     value={twoFactorToken}
                     onChange={(e) => setTwoFactorToken(e.target.value)}
-                    placeholder="ADMIN-2FA-SINGBURI"
+                    placeholder="กรอกรหัสผ่านบัญชีผู้ดูแล"
                     className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-rose-500"
                   />
                 </div>
                 <span className="text-[11px] text-slate-400 mt-1 block font-mono">
-                  * รหัสยืนยัน: ADMIN-2FA-SINGBURI (หรือรหัสผ่านแอดมิน)
+                  ยืนยันด้วยรหัสผ่านของคุณเพื่อบันทึกการปลดล็อก
                 </span>
               </div>
 

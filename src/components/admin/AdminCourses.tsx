@@ -17,6 +17,8 @@ import {
 export const AdminCourses: React.FC = () => {
   const {
     courses,
+    academicTerms,
+    mutate,
     setCourses,
     users,
     activeTerm,
@@ -24,6 +26,8 @@ export const AdminCourses: React.FC = () => {
     addAuditLog,
   } = useApp();
 
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [cloneTerm, setCloneTerm] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCsvModal, setShowCsvModal] = useState(false);
@@ -41,10 +45,11 @@ export const AdminCourses: React.FC = () => {
 
   const teachers = users.filter((u) => {
     const roles = u.assigned_roles && u.assigned_roles.length > 0 ? u.assigned_roles : [u.role];
-    return roles.includes('TEACHER') || roles.includes('REVIEWER');
+    return u.is_active && roles.includes('TEACHER');
   });
 
   const filteredCourses = courses.filter((c) => {
+    if (c.term_id !== activeTerm.id) return false;
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -54,7 +59,7 @@ export const AdminCourses: React.FC = () => {
     );
   });
 
-  const handleAddCourse = (e: React.FormEvent) => {
+  const handleAddCourse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!courseCode || !courseName) return;
 
@@ -72,7 +77,7 @@ export const AdminCourses: React.FC = () => {
       created_at: new Date().toISOString(),
     };
 
-    setCourses([newCourse, ...courses]);
+    if (!(await setCourses([newCourse, ...courses]))) return;
     addAuditLog({
       action_type: 'COURSE_MODIFIED',
       target_id: newCourse.id,
@@ -92,16 +97,26 @@ export const AdminCourses: React.FC = () => {
     setCourseName('');
   };
 
-  const handleSimulateCsvImport = () => {
-    setSuccessMsg('นำเข้ารายวิชาจากไฟล์ CSV สำเร็จ 12 รายวิชา!');
-    setShowCsvModal(false);
-    setTimeout(() => setSuccessMsg(null), 3000);
+  const handleCsvImport = async () => {
+    if (!csvFile) return;
+    try {
+      const { parseCourseCsv } = await import('../../lib/csv');
+      const rows = parseCourseCsv(await csvFile.text(), activeTerm.id, users);
+      if (await mutate('courses-import', { courses: rows, termId: activeTerm.id })) {
+        setSuccessMsg('นำเข้ารายวิชาจาก CSV เรียบร้อยแล้ว');
+        setShowCsvModal(false);
+        setCsvFile(null);
+      }
+    } catch (e) {
+      setSuccessMsg(e instanceof Error ? e.message : 'อ่าน CSV ไม่สำเร็จ');
+    }
   };
 
-  const handleSimulateBulkClone = () => {
-    setSuccessMsg('คัดลอกโครงสร้างรายวิชาข้ามภาคเรียน (Bulk Clone) สำเร็จ!');
-    setShowCloneModal(false);
-    setTimeout(() => setSuccessMsg(null), 3000);
+  const handleBulkClone = async () => {
+    if (await mutate('courses-clone', { fromTermId: cloneTerm, termId: activeTerm.id })) {
+      setShowCloneModal(false);
+      setSuccessMsg('คัดลอกโครงสร้างรายวิชาเรียบร้อยแล้ว');
+    }
   };
 
   return (
@@ -109,7 +124,9 @@ export const AdminCourses: React.FC = () => {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">จัดการโครงสร้างรายวิชา (Courses Management)</h2>
+          <h2 className="text-xl font-bold text-slate-900">
+            จัดการโครงสร้างรายวิชา (Courses Management)
+          </h2>
           <p className="text-xs text-slate-500 mt-0.5">
             กำหนดหลักสูตร, กลุ่มสาระการเรียนรู้, ครูผู้สอน และการเปิด-ปิดรับส่งไฟล์ ปพ.5
           </p>
@@ -159,9 +176,7 @@ export const AdminCourses: React.FC = () => {
             className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
         </div>
-        <div className="text-xs text-slate-500">
-          แสดงทั้งหมด {filteredCourses.length} รายวิชา
-        </div>
+        <div className="text-xs text-slate-500">แสดงทั้งหมด {filteredCourses.length} รายวิชา</div>
       </div>
 
       {/* Courses Table */}
@@ -183,11 +198,17 @@ export const AdminCourses: React.FC = () => {
                 const teacher = users.find((u) => u.id === c.teacher_id);
                 return (
                   <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-4 py-3 font-mono font-bold text-slate-900">{c.course_code}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-slate-900">
+                      {c.course_code}
+                    </td>
                     <td className="px-4 py-3 font-medium text-slate-800">{c.course_name}</td>
-                    <td className="px-4 py-3 text-center font-mono font-medium text-slate-700">{c.grade_level}</td>
+                    <td className="px-4 py-3 text-center font-mono font-medium text-slate-700">
+                      {c.grade_level}
+                    </td>
                     <td className="px-4 py-3 text-slate-600">{c.department}</td>
-                    <td className="px-4 py-3 text-slate-700">{teacher ? teacher.full_name : '-'}</td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {teacher ? teacher.full_name : '-'}
+                    </td>
                     <td className="px-4 py-3 text-center">
                       <button
                         onClick={() => toggleCourseOpenSubmission(c.id)}
@@ -221,13 +242,20 @@ export const AdminCourses: React.FC = () => {
           <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h4 className="text-base font-bold text-slate-900">เพิ่มรายวิชาใหม่ในหลักสูตร</h4>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
             </div>
 
             <form onSubmit={handleAddCourse} className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">รหัสวิชา (เช่น ท13101) *</label>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    รหัสวิชา (เช่น ท13101) *
+                  </label>
                   <input
                     type="text"
                     required
@@ -287,7 +315,9 @@ export const AdminCourses: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">ครูผู้สอนประจำรายวิชา *</label>
+                <label className="block font-bold text-slate-700 mb-1">
+                  ครูผู้สอนประจำรายวิชา *
+                </label>
                 <select
                   value={teacherId}
                   onChange={(e) => setTeacherId(e.target.value)}
@@ -330,11 +360,17 @@ export const AdminCourses: React.FC = () => {
               <span>นำเข้ารายวิชาจากไฟล์ CSV</span>
             </h4>
             <p className="text-xs text-slate-600">
-              อัปโหลดไฟล์ CSV ที่มีคอลัมน์: course_code, course_name, grade_level, department, teacher_id, score_ratio
+              อัปโหลดไฟล์ CSV ที่มีคอลัมน์: course_code, course_name, grade_level, department,
+              teacher_id, score_ratio
             </p>
             <div className="p-4 border-2 border-dashed border-slate-300 rounded-xl text-center bg-slate-50 text-xs text-slate-600">
               <FileSpreadsheet className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-              <span>ลากไฟล์ CSV วางที่นี่ หรือคลิกเพื่อเลือกไฟล์</span>
+              <input
+                aria-label="เลือกไฟล์รายวิชา CSV"
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
+              />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button
@@ -344,7 +380,7 @@ export const AdminCourses: React.FC = () => {
                 ยกเลิก
               </button>
               <button
-                onClick={handleSimulateCsvImport}
+                onClick={handleCsvImport}
                 className="px-4 py-1.5 text-xs font-bold text-white bg-blue-800 hover:bg-blue-900 rounded-lg"
               >
                 เริ่มนำเข้าข้อมูล
@@ -363,8 +399,27 @@ export const AdminCourses: React.FC = () => {
               <span>Bulk Clone รายวิชาข้ามภาคเรียน</span>
             </h4>
             <p className="text-xs text-slate-600">
-              คัดลอกโครงสร้างรายวิชาและครูผู้สอนทั้งหมดจากภาคเรียนก่อนหน้า (เช่น 2568/1) มายังปีการศึกษา {activeTerm.year}/{activeTerm.semester}
+              คัดลอกโครงสร้างรายวิชาและครูผู้สอนทั้งหมดจากภาคเรียนก่อนหน้า (เช่น 2568/1)
+              มายังปีการศึกษา {activeTerm.year}/{activeTerm.semester}
             </p>
+            <label className="text-xs block">
+              ภาคเรียนต้นทาง
+              <select
+                aria-label="ภาคเรียนต้นทาง"
+                value={cloneTerm}
+                onChange={(e) => setCloneTerm(e.target.value)}
+                className="w-full mt-1 p-2 border rounded"
+              >
+                <option value="">เลือกภาคเรียน</option>
+                {academicTerms
+                  .filter((t) => t.id !== activeTerm.id)
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.year}/{t.semester}
+                    </option>
+                  ))}
+              </select>
+            </label>
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setShowCloneModal(false)}
@@ -373,7 +428,7 @@ export const AdminCourses: React.FC = () => {
                 ยกเลิก
               </button>
               <button
-                onClick={handleSimulateBulkClone}
+                onClick={handleBulkClone}
                 className="px-4 py-1.5 text-xs font-bold text-white bg-blue-800 hover:bg-blue-900 rounded-lg"
               >
                 ยืนยันการ Clone

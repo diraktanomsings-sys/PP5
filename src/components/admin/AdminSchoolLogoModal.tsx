@@ -40,14 +40,14 @@ export const AdminSchoolLogoModal: React.FC<AdminSchoolLogoModalProps> = ({ isOp
     setSuccessMessage(null);
 
     // Validate type
-    if (!file.type.startsWith('image/')) {
-      setErrorMessage('กรุณาเลือกไฟล์รูปภาพที่ถูกต้อง (.png, .jpg, .jpeg, .svg, .webp)');
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      setErrorMessage('กรุณาเลือกไฟล์รูปภาพที่ถูกต้อง (.png, .jpg, .jpeg, .webp)');
       return;
     }
 
-    // Validate size (max 8MB)
-    if (file.size > 8 * 1024 * 1024) {
-      setErrorMessage('ไฟล์มีขนาดใหญ่เกินไป (กรุณาใช้ไฟล์ขนาดไม่เกิน 8MB)');
+    // Validate size (max 150 KB)
+    if (file.size > 150000) {
+      setErrorMessage('ไฟล์มีขนาดใหญ่เกินไป (กรุณาใช้ไฟล์ขนาดไม่เกิน 150 KB)');
       return;
     }
 
@@ -64,39 +64,19 @@ export const AdminSchoolLogoModal: React.FC<AdminSchoolLogoModalProps> = ({ isOp
     reader.readAsDataURL(file);
   };
 
-  const handleSaveNewLogo = () => {
-    if (!previewUrl) {
-      setErrorMessage('กรุณาเลือกไฟล์ภาพตราโรงเรียนก่อนบันทึก');
-      return;
-    }
-
+  const handleSaveNewLogo = async () => {
+    if (!previewUrl) return;
     setIsProcessing(true);
-    setTimeout(() => {
-      uploadSchoolLogo(previewUrl);
-      setIsProcessing(false);
-      setSuccessMessage('บันทึกและเปิดใช้งานตราสัญลักษณ์โรงเรียนใหม่สำเร็จเรียบร้อยแล้ว!');
-      setPreviewUrl(null);
-      setSelectedFileName(null);
-      setSelectedFileSize(null);
-      setTimeout(() => {
-        setSuccessMessage(null);
-      }, 3000);
-    }, 400);
+    const ok = await uploadSchoolLogo(previewUrl);
+    setIsProcessing(false);
+    if (ok) onClose();
   };
 
-  const handleResetToDefault = () => {
+  const handleResetToDefault = async () => {
     setIsProcessing(true);
-    setTimeout(() => {
-      removeSchoolLogo();
-      setPreviewUrl(null);
-      setSelectedFileName(null);
-      setSelectedFileSize(null);
-      setIsProcessing(false);
-      setSuccessMessage('คืนค่าตราสัญลักษณ์มาตรฐานของโรงเรียนเรียบร้อยแล้ว');
-      setTimeout(() => {
-        setSuccessMessage(null);
-      }, 3000);
-    }, 300);
+    const ok = await removeSchoolLogo();
+    setIsProcessing(false);
+    if (ok) onClose();
   };
 
   return (
@@ -177,7 +157,8 @@ export const AdminSchoolLogoModal: React.FC<AdminSchoolLogoModalProps> = ({ isOp
               </div>
 
               <p className="text-xs text-slate-600 leading-relaxed">
-                โรงเรียนบ้านคูเมือง · สพป.สิงห์บุรี (จะปรากฏในหน้าหลัก, สมุด ปพ.5, ใบล็อกเล่ม และลายน้ำเอกสารดิจิทัล)
+                โรงเรียนบ้านคูเมือง · สพป.สิงห์บุรี (จะปรากฏในหน้าหลัก, สมุด ปพ.5, ใบล็อกเล่ม
+                และลายน้ำเอกสารดิจิทัล)
               </p>
 
               {previewUrl && selectedFileName && (
@@ -213,7 +194,7 @@ export const AdminSchoolLogoModal: React.FC<AdminSchoolLogoModalProps> = ({ isOp
                 คลิกเพื่อเลือกไฟล์ภาพ หรือลากไฟล์มาวางที่นี่
               </div>
               <p className="text-[11px] text-slate-500">
-                รองรับไฟล์ PNG (แนะนำแบบพื้นหลังโปร่งใส), JPG, SVG ขนาดไม่เกิน 8MB
+                รองรับไฟล์ PNG (แนะนำแบบพื้นหลังโปร่งใส), JPG, SVG ขนาดไม่เกิน 150 KB
               </p>
             </div>
           </div>

@@ -23,8 +23,8 @@ import {
 
 export const AdminDashboard: React.FC = () => {
   const {
-    courses,
-    submissions,
+    courses: allCourses,
+    submissions: allSubmissions,
     users,
     assignments,
     activeTerm,
@@ -36,6 +36,9 @@ export const AdminDashboard: React.FC = () => {
     hasCustomLogo,
     removeSchoolLogo,
   } = useApp();
+  const courses = allCourses.filter((c) => c.term_id === activeTerm.id);
+  const courseIds = new Set(courses.map((c) => c.id));
+  const submissions = allSubmissions.filter((s) => courseIds.has(s.course_id));
 
   const [showLogoModal, setShowLogoModal] = useState(false);
 
@@ -48,7 +51,7 @@ export const AdminDashboard: React.FC = () => {
       return { course: c, sub, teacher };
     })
     .filter(
-      (item) => !item.sub || item.sub.status === 'DRAFT' || item.sub.status === 'REJECTED_REVISION'
+      (item) => !item.sub || item.sub.status === 'DRAFT' || item.sub.status === 'REJECTED_REVISION',
     );
 
   // 2. Stuck at Reviewer (PENDING_REVIEW)
@@ -83,13 +86,16 @@ export const AdminDashboard: React.FC = () => {
               ผู้ดูแลระบบส่วนกลาง (Central Admin Console)
             </span>
             <span>·</span>
-            <span>ปีการศึกษา {activeTerm.year} / {activeTerm.semester}</span>
+            <span>
+              ปีการศึกษา {activeTerm.year} / {activeTerm.semester}
+            </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold mt-1 text-white">
             ศูนย์ควบคุมระบบ ปพ.5 ออนไลน์ โรงเรียนบ้านคูเมือง
           </h2>
           <p className="text-xs sm:text-sm text-slate-300 mt-1">
-            วิเคราะห์คอขวดของกระบวนการส่งงาน (Workflow Bottleneck Tracker) และกำกับดูแลธรรมาภิบาลข้อมูล
+            วิเคราะห์คอขวดของกระบวนการส่งงาน (Workflow Bottleneck Tracker)
+            และกำกับดูแลธรรมาภิบาลข้อมูล
           </p>
         </div>
 
@@ -103,7 +109,8 @@ export const AdminDashboard: React.FC = () => {
             <span>จัดการตราโรงเรียน (เพิ่ม/ลบ)</span>
           </button>
           <a
-            href={organizationDriveUrl}
+            href={organizationDriveUrl || undefined}
+            aria-disabled={!organizationDriveUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
@@ -148,7 +155,9 @@ export const AdminDashboard: React.FC = () => {
             </div>
           </div>
           <div className="text-2xl font-bold text-slate-900 font-mono mt-2">{courses.length}</div>
-          <div className="text-[11px] text-slate-400 mt-1">วิชาในภาคเรียน {activeTerm.semester}/{activeTerm.year}</div>
+          <div className="text-[11px] text-slate-400 mt-1">
+            วิชาในภาคเรียน {activeTerm.semester}/{activeTerm.year}
+          </div>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
@@ -164,14 +173,19 @@ export const AdminDashboard: React.FC = () => {
 
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">ผ่านการอนุมัติ (Final Locked)</span>
+            <span className="text-xs font-semibold text-slate-500">
+              ผ่านการอนุมัติ (Final Locked)
+            </span>
             <div className="p-2 bg-emerald-50 text-emerald-700 rounded-lg">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-bold text-emerald-800 font-mono mt-2">{finalLockedCount}</div>
+          <div className="text-2xl font-bold text-emerald-800 font-mono mt-2">
+            {finalLockedCount}
+          </div>
           <div className="text-[11px] text-emerald-600 mt-1">
-            ความคืบหน้า {courses.length > 0 ? ((finalLockedCount / courses.length) * 100).toFixed(0) : 0}%
+            ความคืบหน้า{' '}
+            {courses.length > 0 ? ((finalLockedCount / courses.length) * 100).toFixed(0) : 0}%
           </div>
         </div>
 
@@ -215,7 +229,8 @@ export const AdminDashboard: React.FC = () => {
               )}
             </div>
             <p className="text-xs text-blue-200/80 leading-relaxed">
-              ภาพตราสัญลักษณ์นี้จะถูกนำไปใช้ในทุกหน้าของระบบ ทั้งหน้าเข้าสู่ระบบ, เมนูด้านข้าง, สมุด ปพ.5 ดิจิทัล และใบล็อกเล่มทางการ
+              ภาพตราสัญลักษณ์นี้จะถูกนำไปใช้ในทุกหน้าของระบบ ทั้งหน้าเข้าสู่ระบบ, เมนูด้านข้าง, สมุด
+              ปพ.5 ดิจิทัล และใบล็อกเล่มทางการ
             </p>
           </div>
         </div>
@@ -250,7 +265,7 @@ export const AdminDashboard: React.FC = () => {
               <span>Workflow Bottleneck Tracker (วิเคราะห์งานติดค้างอยู่ที่ใคร)</span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              ติดตามตรวจสอบสถานะรายวิชาแบบเรียลไทม์เพื่อเร่งรัดการจัดทำเอกสารตามกำหนดเวลา
+              ติดตามตรวจสอบสถานะรายวิชาเมื่อรีเฟรชข้อมูลเพื่อเร่งรัดการจัดทำเอกสารตามกำหนดเวลา
             </p>
           </div>
           <span className="text-xs font-mono bg-slate-100 text-slate-700 px-2.5 py-1 rounded">
@@ -273,12 +288,19 @@ export const AdminDashboard: React.FC = () => {
 
             <div className="mt-3 space-y-2">
               {teacherBottlenecks.map(({ course, sub, teacher }) => (
-                <div key={course.id} className="p-2.5 bg-white rounded-lg border border-slate-200 text-xs shadow-2xs">
+                <div
+                  key={course.id}
+                  className="p-2.5 bg-white rounded-lg border border-slate-200 text-xs shadow-2xs"
+                >
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-slate-900 font-mono">{course.course_code}</span>
-                    <span className="text-[11px] font-mono text-slate-500">{course.grade_level}</span>
+                    <span className="text-[11px] font-mono text-slate-500">
+                      {course.grade_level}
+                    </span>
                   </div>
-                  <div className="text-[11px] text-slate-600 truncate mt-0.5">{course.course_name}</div>
+                  <div className="text-[11px] text-slate-600 truncate mt-0.5">
+                    {course.course_name}
+                  </div>
                   <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between">
                     <span>ครู: {teacher?.full_name}</span>
                     {sub?.status === 'REJECTED_REVISION' ? (
@@ -308,14 +330,21 @@ export const AdminDashboard: React.FC = () => {
               {reviewerBottlenecks.map(({ submission, course, reviewer, teacher }) => {
                 if (!course) return null;
                 return (
-                  <div key={submission.id} className="p-2.5 bg-white rounded-lg border border-purple-200 text-xs shadow-2xs">
+                  <div
+                    key={submission.id}
+                    className="p-2.5 bg-white rounded-lg border border-purple-200 text-xs shadow-2xs"
+                  >
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-900 font-mono">{course.course_code}</span>
+                      <span className="font-bold text-slate-900 font-mono">
+                        {course.course_code}
+                      </span>
                       <span className="text-[11px] font-mono text-purple-700 font-bold">
                         {submission.versions[0]?.version_number || 'V001'}
                       </span>
                     </div>
-                    <div className="text-[11px] text-slate-600 truncate mt-0.5">{course.course_name}</div>
+                    <div className="text-[11px] text-slate-600 truncate mt-0.5">
+                      {course.course_name}
+                    </div>
                     <div className="text-[10px] text-purple-900 mt-1 flex items-center justify-between font-medium">
                       <span>ผู้ตรวจ: {reviewer ? reviewer.full_name : 'ยังไม่มอบหมาย'}</span>
                       <button
@@ -350,12 +379,21 @@ export const AdminDashboard: React.FC = () => {
               {directorBottlenecks.map(({ submission, course, teacher }) => {
                 if (!course) return null;
                 return (
-                  <div key={submission.id} className="p-2.5 bg-white rounded-lg border border-amber-200 text-xs shadow-2xs">
+                  <div
+                    key={submission.id}
+                    className="p-2.5 bg-white rounded-lg border border-amber-200 text-xs shadow-2xs"
+                  >
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-900 font-mono">{course.course_code}</span>
-                      <span className="text-[11px] font-mono text-amber-800 font-bold">ผ่านตรวจแล้ว</span>
+                      <span className="font-bold text-slate-900 font-mono">
+                        {course.course_code}
+                      </span>
+                      <span className="text-[11px] font-mono text-amber-800 font-bold">
+                        ผ่านตรวจแล้ว
+                      </span>
                     </div>
-                    <div className="text-[11px] text-slate-600 truncate mt-0.5">{course.course_name}</div>
+                    <div className="text-[11px] text-slate-600 truncate mt-0.5">
+                      {course.course_name}
+                    </div>
                     <div className="text-[10px] text-amber-900 mt-1 flex items-center justify-between">
                       <span>ครู: {teacher?.full_name}</span>
                       <button
@@ -377,10 +415,7 @@ export const AdminDashboard: React.FC = () => {
       </div>
 
       {/* Admin School Logo Manager Modal */}
-      <AdminSchoolLogoModal
-        isOpen={showLogoModal}
-        onClose={() => setShowLogoModal(false)}
-      />
+      <AdminSchoolLogoModal isOpen={showLogoModal} onClose={() => setShowLogoModal(false)} />
     </div>
   );
 };
