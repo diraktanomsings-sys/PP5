@@ -1,4 +1,8 @@
 node_modules/
+.pp5-local/
+audit/
+pp5-fixed.jpg
+tests/fixtures/
 build/
 dist/
 coverage/
