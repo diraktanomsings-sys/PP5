@@ -10,6 +10,7 @@ import type { ObjectStorage } from './storage.js';
 import { ApiError, requireThat } from './security.js';
 import { signedPdf } from './signed-pdf.js';
 import type { DriveBridge } from './drive-bridge.js';
+import { selectArchive, zipSegment } from './archive.js';
 
 const COOKIE = 'pp5_session';
 function token(req: Request) {
@@ -162,23 +163,8 @@ export function createHttp(
         }
         if (action === 'archive') {
           const state = await service.snapshot(token(req), role(req));
-          const subs = state.submissions.filter(
-            (s) =>
-              s.status === 'FINAL_LOCKED' &&
-              (!req.query.termId ||
-                state.courses.find((c) => c.id === s.courseId)?.termId === req.query.termId) &&
-              (!req.query.year ||
-                String(
-                  state.terms.find(
-                    (t) => t.id === state.courses.find((c) => c.id === s.courseId)?.termId,
-                  )?.year,
-                ) === req.query.year) &&
-              (!req.query.grade ||
-                state.courses
-                  .find((c) => c.id === s.courseId)
-                  ?.grade.startsWith(String(req.query.grade))),
-          );
-          requireThat(subs.length, 404, 'ไม่มีเอกสารที่อนุมัติแล้ว');
+          const subs = selectArchive(state, req.query);
+          requireThat(subs.length, 404, 'ไม่พบเอกสารตามตัวกรองที่เลือก');
           const files = subs.flatMap((s) => [s.versions.at(-1)!.excel, s.versions.at(-1)!.pdf]);
           requireThat(
             files.reduce((n, f) => n + f.size, 0) <= 50 * 1024 * 1024,
@@ -186,24 +172,50 @@ export function createHttp(
             'ไฟล์รวมเกิน 50 MB กรุณาดาวน์โหลดแยกรายวิชา',
           );
           const entries: Record<string, Uint8Array> = {};
+          const reads: Array<() => Promise<void>> = [];
           for (const sub of subs) {
             const c = state.courses.find((c) => c.id === sub.courseId)!;
-            const prefix = `${c.code}_${c.grade.replace(/[\\/]/g, '-')}_${sub.id.slice(0, 8)}`;
+            const prefix = `${zipSegment(c.code)}_${zipSegment(c.grade)}_${sub.id.slice(0, 8)}`;
             for (const f of [sub.versions.at(-1)!.excel, sub.versions.at(-1)!.pdf])
-              entries[`${prefix}/${f.name}`] = await storage.bytes(
-                await service.accessibleFile(token(req), role(req), f.id),
+              reads.push(async () => {
+                entries[`${prefix}/${zipSegment(f.name)}`] = await storage.bytes(
+                  await service.accessibleFile(token(req), role(req), f.id),
+                );
+              });
+            entries[`${prefix}/submission.json`] = Buffer.from(
+              JSON.stringify(
+                { id: sub.id, status: sub.status, version: sub.versions.at(-1)!.number },
+                null,
+                2,
+              ),
+            );
+            if (sub.status === 'FINAL_LOCKED' && sub.approval)
+              entries[`${prefix}/approval.json`] = Buffer.from(
+                JSON.stringify(sub.approval, null, 2),
               );
-            entries[`${prefix}/approval.json`] = Buffer.from(JSON.stringify(sub.approval, null, 2));
             if (sub.approvalHistory?.length)
               entries[`${prefix}/approval-history.json`] = Buffer.from(
                 JSON.stringify(sub.approvalHistory, null, 2),
               );
           }
+          // Bound concurrent Drive requests while avoiding one round trip per file in series.
+          for (let i = 0; i < reads.length; i += 3)
+            await Promise.all(reads.slice(i, i + 3).map((read) => read()));
           res.set({
             'Content-Type': 'application/zip',
             'Content-Disposition': disposition('PP5-archive.zip'),
           });
-          await pipeline(Readable.from([Buffer.from(zipSync(entries, { level: 0 }))]), res);
+          const zip = Buffer.from(zipSync(entries, { level: 0 }));
+          res.flushHeaders();
+          await pipeline(
+            Readable.from(
+              (function* () {
+                for (let i = 0; i < zip.length; i += 64 * 1024)
+                  yield zip.subarray(i, i + 64 * 1024);
+              })(),
+            ),
+            res,
+          );
           return;
         }
         throw new ApiError(404, 'ไม่พบข้อมูล');

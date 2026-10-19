@@ -4,6 +4,12 @@ import { StatusBadge } from '../common/StatusBadge';
 import { CertificateHashModal } from '../common/CertificateHashModal';
 import { AdminDriveStorage } from './AdminDriveStorage';
 import {
+  archiveRows,
+  archiveStatuses,
+  sameGradeLevel,
+  type ArchiveStatus,
+} from '../../lib/archive';
+import {
   Archive,
   Download,
   Lock,
@@ -43,6 +49,7 @@ export const AdminArchive: React.FC = () => {
     organizationDriveUrl,
     organizationDriveFolderId,
     updateOrganizationDriveUrl,
+    setError,
   } = useApp();
 
   // Filter States
@@ -50,6 +57,9 @@ export const AdminArchive: React.FC = () => {
   const [selectedYear, setSelectedYear] = useState<string>('ALL');
   const [selectedGrade, setSelectedGrade] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState<ArchiveStatus>(
+    currentRole === 'EXECUTIVE' ? 'FINAL_LOCKED' : 'ALL',
+  );
 
   // Notifications & Modals
   const [downloadSuccessMsg, setDownloadSuccessMsg] = useState<string | null>(null);
@@ -79,17 +89,27 @@ export const AdminArchive: React.FC = () => {
   };
 
   const handleDownloadZip = async (scope: 'TERM' | 'YEAR' | 'GRADE' | 'ALL', label?: string) => {
-    const filters: Record<string, string> = {};
-    if (scope !== 'ALL') {
-      if (selectedTermId !== 'ALL') filters.termId = selectedTermId;
-      else if (selectedYear !== 'ALL') filters.year = selectedYear;
-      if (selectedGrade !== 'ALL') filters.grade = selectedGrade;
+    const rows = archiveRows(
+      { submissions, courses, terms: academicTerms, users },
+      {
+        termId: selectedTermId,
+        year: selectedYear,
+        grade: scope === 'GRADE' && label ? label : selectedGrade,
+        q: searchQuery,
+        status: selectedStatus,
+      },
+    );
+    if (!rows.length) {
+      setError('ไม่พบเอกสารตามตัวกรองที่เลือก');
+      return;
     }
-    if (scope === 'TERM' && selectedTermId !== 'ALL') filters.termId = selectedTermId;
-    else if (scope === 'YEAR' && selectedYear !== 'ALL') filters.year = selectedYear;
-    else if (scope === 'GRADE' && (label || selectedGrade) !== 'ALL')
-      filters.grade = label || selectedGrade;
-    if (await downloadArchive(filters))
+    if (rows.length > 100) {
+      setError('เลือกปี ภาคเรียน หรือระดับชั้นให้เหลือไม่เกิน 100 รายวิชาต่อ ZIP');
+      return;
+    }
+    if (
+      await downloadArchive({ status: 'ALL', ids: rows.map((row) => row.submission.id).join(',') })
+    )
       setDownloadSuccessMsg('ดาวน์โหลด ZIP จากไฟล์ต้นฉบับเรียบร้อยแล้ว');
   };
 
@@ -110,54 +130,16 @@ export const AdminArchive: React.FC = () => {
 
   // Filtered Submissions Logic
   const filteredSubmissions = useMemo(() => {
-    return submissions
-      .filter((s) => s.status === 'FINAL_LOCKED')
-      .map((s) => {
-        const course = courses.find((c) => c.id === s.course_id);
-        const term = academicTerms.find((t) => t.id === course?.term_id);
-        const teacher = users.find((u) => u.id === course?.teacher_id);
-        const latestVer =
-          s.versions && s.versions.length > 0 ? s.versions[s.versions.length - 1] : null;
-        return {
-          submission: s,
-          course,
-          term,
-          teacher,
-          latestVer,
-        };
-      })
-      .filter(({ course, term, teacher }) => {
-        if (!course) return false;
-
-        // Filter by Term
-        if (selectedTermId !== 'ALL' && course.term_id !== selectedTermId) {
-          return false;
-        }
-
-        // Filter by Academic Year
-        if (selectedYear !== 'ALL' && term && term.year.toString() !== selectedYear) {
-          return false;
-        }
-
-        // Filter by Grade Level
-        if (selectedGrade !== 'ALL' && !course.grade_level.startsWith(selectedGrade)) {
-          return false;
-        }
-
-        // Filter by Search Query
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase().trim();
-          const matchCode = course.course_code.toLowerCase().includes(q);
-          const matchName = course.course_name.toLowerCase().includes(q);
-          const matchTeacher = teacher?.full_name?.toLowerCase().includes(q) || false;
-          const matchGrade = course.grade_level.toLowerCase().includes(q);
-          if (!matchCode && !matchName && !matchTeacher && !matchGrade) {
-            return false;
-          }
-        }
-
-        return true;
-      });
+    return archiveRows(
+      { submissions, courses, terms: academicTerms, users },
+      {
+        termId: selectedTermId,
+        year: selectedYear,
+        grade: selectedGrade,
+        q: searchQuery,
+        status: selectedStatus,
+      },
+    );
   }, [
     submissions,
     courses,
@@ -167,10 +149,13 @@ export const AdminArchive: React.FC = () => {
     selectedYear,
     selectedGrade,
     searchQuery,
+    selectedStatus,
   ]);
 
   // Stats calculation
-  const totalLockedCourses = filteredSubmissions.length;
+  const totalLockedCourses = filteredSubmissions.filter(
+    (row) => row.submission.status === 'FINAL_LOCKED',
+  ).length;
   const mean = (values: number[], digits: number) => {
     const known = values.filter(Number.isFinite);
     return known.length ? (known.reduce((a, b) => a + b, 0) / known.length).toFixed(digits) : '—';
@@ -190,7 +175,7 @@ export const AdminArchive: React.FC = () => {
       const term = academicTerms.find((t) => t.id === c.term_id);
       if (selectedTermId !== 'ALL' && c.term_id !== selectedTermId) return false;
       if (selectedYear !== 'ALL' && term && term.year.toString() !== selectedYear) return false;
-      return c.grade_level.startsWith(lvl);
+      return sameGradeLevel(c.grade_level, lvl);
     });
 
     const lockedCount = gradeCourses.filter((c) => {
@@ -224,8 +209,7 @@ export const AdminArchive: React.FC = () => {
             คลัง ปพ.5 รายเทอม / รายปีการศึกษาย้อนหลัง
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            สืบค้นและดาวน์โหลดไฟล์ ปพ.5 (Excel & PDF) ย้อนหลังได้ทุกปีการศึกษาและทุกภาคเรียน
-            แม้ว่าจะผ่านมาแล้ว
+            สืบค้นไฟล์ Excel/PDF ที่ส่งแล้วตามสิทธิ์ แยกดูเอกสารรอตรวจและเอกสารที่อนุมัติแล้วได้
           </p>
         </div>
 
@@ -253,12 +237,13 @@ export const AdminArchive: React.FC = () => {
           )}
 
           <button
+            disabled={!filteredSubmissions.length}
             onClick={() => handleDownloadZip('ALL')}
             className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer"
-            title="ดาวน์โหลด ZIP รวมเอกสาร ปพ.5 ทุกระดับชั้นและทุกภาคเรียน"
+            title="ดาวน์โหลดฉบับล่าสุดตรงตามรายการและตัวกรองที่แสดง"
           >
             <FolderArchive className="w-4 h-4" />
-            <span>ดาวน์โหลด ZIP รวมทุกไฟล์</span>
+            <span>ดาวน์โหลด ZIP ตามตัวกรอง</span>
           </button>
         </div>
       </div>
@@ -385,11 +370,38 @@ export const AdminArchive: React.FC = () => {
 
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-slate-400 font-mono">
-              พบ {totalLockedCourses} รายวิชาในคลัง
+              พบ {filteredSubmissions.length} รายวิชาที่ส่งแล้ว
             </span>
           </div>
         </div>
 
+        <label className="block text-xs font-semibold text-slate-700">
+          สถานะเอกสาร
+          <select
+            aria-label="สถานะเอกสารในคลัง"
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value as ArchiveStatus)}
+            className="ml-3 p-2 border border-slate-300 rounded-lg bg-slate-50"
+          >
+            {Object.entries(archiveStatuses).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          className="text-xs text-blue-800 underline"
+          onClick={() => {
+            setSelectedTermId('ALL');
+            setSelectedYear('ALL');
+            setSelectedGrade('ALL');
+            setSearchQuery('');
+            setSelectedStatus(currentRole === 'EXECUTIVE' ? 'FINAL_LOCKED' : 'ALL');
+          }}
+        >
+          ล้างตัวกรอง
+        </button>
         {/* Filter Controls Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
           {/* Term Selector */}
@@ -429,12 +441,7 @@ export const AdminArchive: React.FC = () => {
               value={selectedYear}
               onChange={(e) => {
                 setSelectedYear(e.target.value);
-                if (e.target.value !== 'ALL' && selectedTermId !== 'ALL') {
-                  const currTerm = academicTerms.find((t) => t.id === selectedTermId);
-                  if (currTerm && currTerm.year.toString() !== e.target.value) {
-                    setSelectedTermId('ALL');
-                  }
-                }
+                setSelectedTermId('ALL');
               }}
               className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
@@ -578,7 +585,8 @@ export const AdminArchive: React.FC = () => {
               <span>รายการ ปพ.5 พร้อมดาวน์โหลด ({filteredSubmissions.length} รายการ)</span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              ทุกรายการผ่านการตรวจสอบ 4 ด้าน ลงนาม e-Signature และประทับตรารับรอง Digital Hash แล้ว
+              ดาวน์โหลดต้นฉบับฉบับล่าสุดได้ทุกสถานะ
+              หลักฐานลายมือชื่อและตราประทับมีเฉพาะเล่มที่อนุมัติแล้ว
             </p>
           </div>
 
@@ -622,7 +630,7 @@ export const AdminArchive: React.FC = () => {
                       ไม่พบเอกสาร ปพ.5 ตามเงื่อนไขที่เลือก
                     </p>
                     <p className="text-xs text-slate-400 mt-1">
-                      ลองเปลี่ยนปีการศึกษา ภาคเรียน หรือล้างคำค้นหาเพื่อดูข้อมูลทั้งหมด
+                      ถ้าส่งไฟล์แล้ว ให้เลือกทุกสถานะหรือล้างตัวกรอง เอกสารรอตรวจยังไม่ถือว่าอนุมัติ
                     </p>
                   </td>
                 </tr>
@@ -682,21 +690,23 @@ export const AdminArchive: React.FC = () => {
 
                       {/* Hash */}
                       <td className="px-4 py-3.5 font-mono text-[11px] text-slate-500">
-                        <button
-                          onClick={() => setViewCertSubId(submission.id)}
-                          className="text-blue-700 hover:underline max-w-[160px] truncate block font-mono text-left cursor-pointer"
-                          title="คลิกเพื่อดูใบรับรองดิจิทัลและพิมพ์"
-                        >
-                          {submission.digital_certificate_hash || 'SHA256:7e9b4d18...'}
-                        </button>
+                        {submission.status === 'FINAL_LOCKED' &&
+                        submission.digital_certificate_hash ? (
+                          <button
+                            onClick={() => setViewCertSubId(submission.id)}
+                            className="text-blue-700 hover:underline max-w-[160px] truncate block font-mono text-left cursor-pointer"
+                            title="คลิกเพื่อดูใบรับรองดิจิทัลและพิมพ์"
+                          >
+                            {submission.digital_certificate_hash}
+                          </button>
+                        ) : (
+                          <span className="text-slate-400">ยังไม่อนุมัติ</span>
+                        )}
                       </td>
 
                       {/* Status */}
                       <td className="px-4 py-3.5 text-center whitespace-nowrap">
-                        <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px] inline-flex items-center gap-1">
-                          <Lock className="w-3 h-3" />
-                          Final Locked
-                        </span>
+                        <StatusBadge status={submission.status} size="sm" />
                       </td>
 
                       {/* Action Buttons: Direct File Downloads */}
@@ -704,6 +714,7 @@ export const AdminArchive: React.FC = () => {
                         <div className="flex items-center justify-end gap-1.5">
                           {/* 1. Download Excel */}
                           <button
+                            disabled={!latestVer}
                             onClick={() =>
                               handleDownloadSingleFile(latestVer!.excel_file_url, excelName)
                             }
@@ -716,6 +727,7 @@ export const AdminArchive: React.FC = () => {
 
                           {/* 2. Download PDF */}
                           <button
+                            disabled={!latestVer}
                             onClick={() =>
                               handleDownloadSingleFile(latestVer!.pdf_file_url, pdfName)
                             }
@@ -727,16 +739,18 @@ export const AdminArchive: React.FC = () => {
                           </button>
 
                           {/* 3. Certificate Modal */}
-                          <button
-                            onClick={() => setViewCertSubId(submission.id)}
-                            className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-                            title="ดูตราประทับและใบรับรองดิจิทัล"
-                          >
-                            ตราประทับ
-                          </button>
+                          {submission.status === 'FINAL_LOCKED' && (
+                            <button
+                              onClick={() => setViewCertSubId(submission.id)}
+                              className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                              title="ดูตราประทับและใบรับรองดิจิทัล"
+                            >
+                              ตราประทับ
+                            </button>
+                          )}
 
                           {/* 4. Emergency Unlock (Admin Only) */}
-                          {currentRole === 'ADMIN' && (
+                          {currentRole === 'ADMIN' && submission.status === 'FINAL_LOCKED' && (
                             <button
                               onClick={() => {
                                 setSelectedSubToUnlock(submission.id);

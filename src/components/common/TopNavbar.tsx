@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { UserRole } from '../../types/schema';
+import { notificationView } from '../../lib/navigation';
 import { AdminSchoolLogoModal } from '../admin/AdminSchoolLogoModal';
 import {
   Menu,
@@ -41,6 +42,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onToggleSidebar, onMobileO
     activeTerm,
     schoolLogoUrl,
     changePassword,
+    setSelectedSubmissionId,
   } = useApp();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -151,7 +153,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onToggleSidebar, onMobileO
                 title="การแจ้งเตือน"
               >
                 <Bell className="w-4 h-4" />
-                {(pendingReviewCount > 0 || rejectedCount > 0) && (
+                {(pendingReviewCount > 0 || rejectedCount > 0 || pendingDirectorCount > 0) && (
                   <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white" />
                 )}
               </button>
@@ -172,7 +174,11 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onToggleSidebar, onMobileO
                       <div
                         onClick={() => {
                           setShowNotifications(false);
-                          setActiveView('teacher/dashboard');
+                          if (currentRole === 'TEACHER')
+                            setSelectedSubmissionId(
+                              submissions.find((s) => s.status === 'REJECTED_REVISION')?.id || null,
+                            );
+                          setActiveView(notificationView(currentRole, 'REJECTED_REVISION'));
                         }}
                         className="p-2.5 bg-rose-50 rounded-xl border border-rose-100 text-rose-800 cursor-pointer hover:bg-rose-100/60"
                       >
@@ -180,7 +186,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onToggleSidebar, onMobileO
                           มีเอกสารส่งกลับแก้ไข {rejectedCount} รายวิชา
                         </p>
                         <p className="text-[11px] text-rose-600 mt-0.5">
-                          วิชา ท13101 ภาษาไทย 3 ส่งกลับเพื่อแก้สูตร
+                          เปิดดูรายการและเหตุผลการส่งกลับตามข้อมูลที่บันทึกไว้
                         </p>
                       </div>
                     )}
@@ -188,13 +194,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onToggleSidebar, onMobileO
                       <div
                         onClick={() => {
                           setShowNotifications(false);
-                          if (currentRole === 'REVIEWER') {
-                            setActiveView('reviewer/dashboard');
-                          } else if (assignedRoles.includes('REVIEWER')) {
-                            handleRoleSwitch('REVIEWER');
-                          } else {
-                            setActiveView('reviewer/dashboard');
-                          }
+                          setActiveView(notificationView(currentRole, 'PENDING_REVIEW'));
                         }}
                         className="p-2.5 bg-blue-50 rounded-xl border border-blue-100 text-blue-800 cursor-pointer hover:bg-blue-100/60"
                       >
@@ -210,13 +210,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onToggleSidebar, onMobileO
                       <div
                         onClick={() => {
                           setShowNotifications(false);
-                          if (currentRole === 'EXECUTIVE') {
-                            setActiveView('executive/dashboard');
-                          } else if (assignedRoles.includes('EXECUTIVE')) {
-                            handleRoleSwitch('EXECUTIVE');
-                          } else {
-                            setActiveView('executive/dashboard');
-                          }
+                          setActiveView(notificationView(currentRole, 'PENDING_DIRECTOR'));
                         }}
                         className="p-2.5 bg-amber-50 rounded-xl border border-amber-100 text-amber-800 cursor-pointer hover:bg-amber-100/60"
                       >

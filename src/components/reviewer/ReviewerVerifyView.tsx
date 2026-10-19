@@ -76,7 +76,8 @@ export const ReviewerVerifyView: React.FC = () => {
 
   // Four-Eyes Principle: Instructor cannot review own course
   const isSelfReview = course.teacher_id === currentUser.id;
-  const allPillarsChecked = ratioOk && attendanceOk && traitsOk && readingOk && !isSelfReview;
+  const canReview = !isSelfReview && submission.status === 'PENDING_REVIEW';
+  const allPillarsChecked = ratioOk && attendanceOk && traitsOk && readingOk && canReview;
 
   const handleSetAllChecks = (status: boolean) => {
     setRatioOk(status);
@@ -372,7 +373,7 @@ export const ReviewerVerifyView: React.FC = () => {
         <div className="mt-8 pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
           <button
             onClick={() => setShowRejectModal(true)}
-            disabled={isSelfReview}
+            disabled={!canReview}
             className={`px-4 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${
               isSelfReview
                 ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'

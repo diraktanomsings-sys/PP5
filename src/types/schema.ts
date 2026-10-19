@@ -71,6 +71,7 @@ export interface SubmissionVersion {
   submitted_by: string;
   submitted_at: string;
   reviewer_notes?: string;
+  reviewed_by?: string;
   annotated_file_url?: string;
   annotated_file_name?: string;
   // 4 Validation pillars

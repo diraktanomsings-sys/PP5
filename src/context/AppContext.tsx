@@ -197,6 +197,7 @@ function useServerApp() {
         submitted_by: v.submittedBy,
         submitted_at: v.submittedAt,
         reviewer_notes: v.review?.notes || v.notes,
+        reviewed_by: v.review?.by,
         drive_file_url: v.driveUrl,
         findings: v.findings,
         validation_ratio_correct: v.review?.checks[0] || false,
