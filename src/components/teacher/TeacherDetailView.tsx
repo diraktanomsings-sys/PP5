@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { RevisionFilePicker } from './RevisionFilePicker';
 import { useApp } from '../../context/AppContext';
 import { WorkflowStepper } from '../common/WorkflowStepper';
 import { StatusBadge } from '../common/StatusBadge';
@@ -49,6 +50,25 @@ export const TeacherDetailView: React.FC = () => {
   const [revisionPdf, setRevisionPdf] = useState<File | null>(null);
   const [revDriveFileLink, setRevDriveFileLink] = useState('');
   const [isSubmittingRev, setIsSubmittingRev] = useState(false);
+  const revisionDialog = useRef<HTMLDivElement>(null);
+  const revisionCancel = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!showRevisionModal) return;
+    const previous = document.activeElement as HTMLElement | null;
+    revisionCancel.current?.focus();
+    return () => previous?.focus();
+  }, [showRevisionModal]);
+  useEffect(() => {
+    setShowRevisionModal(false);
+    setRevisionExcel(null);
+    setRevisionPdf(null);
+    setRevisionNotes('');
+  }, [selectedSubmissionId]);
+  const openRevision = () => {
+    setRevisionExcel(null);
+    setRevisionPdf(null);
+    setShowRevisionModal(true);
+  };
 
   // Find submissions belonging to this teacher
   const mySubmissions = submissions.filter((s) => {
@@ -114,7 +134,7 @@ export const TeacherDetailView: React.FC = () => {
         <div className="flex items-center gap-2">
           {submission.status === 'REJECTED_REVISION' && course.teacher_id === currentUser.id && (
             <button
-              onClick={() => setShowRevisionModal(true)}
+              onClick={openRevision}
               className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-2 animate-pulse cursor-pointer"
             >
               <Upload className="w-4 h-4" />
@@ -242,7 +262,7 @@ export const TeacherDetailView: React.FC = () => {
 
                 <div className="mt-4 flex justify-end">
                   <button
-                    onClick={() => setShowRevisionModal(true)}
+                    onClick={openRevision}
                     className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs"
                   >
                     <Upload className="w-3.5 h-3.5" />
@@ -326,13 +346,42 @@ export const TeacherDetailView: React.FC = () => {
       {/* Revision Modal */}
       {showRevisionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl p-6 space-y-4">
+          <div
+            ref={revisionDialog}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="revision-title"
+            className="bg-white rounded-2xl max-w-2xl w-full max-h-[90dvh] overflow-y-auto border border-slate-200 shadow-2xl p-6 space-y-4"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && !isSubmittingRev) setShowRevisionModal(false);
+              if (e.key !== 'Tab') return;
+              const controls = Array.from(
+                revisionDialog.current?.querySelectorAll<HTMLElement>(
+                  'button:not(:disabled), textarea, input:not([type="file"])',
+                ) || [],
+              );
+              const first = controls[0],
+                last = controls.at(-1);
+              if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last?.focus();
+              } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first?.focus();
+              }
+            }}
+          >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h4 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <h4
+                id="revision-title"
+                className="text-base font-bold text-slate-900 flex items-center gap-2"
+              >
                 <Upload className="w-5 h-5 text-rose-600" />
                 <span>ส่งไฟล์แก้ไข ปพ.5 ({nextVerNumber})</span>
               </h4>
               <button
+                aria-label="ปิดหน้าส่งไฟล์แก้ไข"
+                disabled={isSubmittingRev}
                 onClick={() => setShowRevisionModal(false)}
                 className="text-slate-400 hover:text-slate-600"
               >
@@ -340,39 +389,30 @@ export const TeacherDetailView: React.FC = () => {
               </button>
             </div>
 
-            <p className="text-xs text-slate-600">
-              อัปโหลดไฟล์คู่ชุดใหม่ที่ได้แก้ไขจุดบกพร่องตามที่ผู้ตรวจระบุเรียบร้อยแล้ว
-            </p>
-
-            <label className="block text-xs font-bold">
-              เลือก Excel ฉบับแก้ไข
-              <input
-                aria-label="Excel ฉบับแก้ไข"
-                type="file"
-                accept=".xlsx"
-                onChange={(e) => setRevisionExcel(e.target.files?.[0] || null)}
-                className="block mt-2"
-              />
-            </label>
-            <label className="block text-xs font-bold">
-              เลือก PDF ฉบับแก้ไข
-              <input
-                aria-label="PDF ฉบับแก้ไข"
-                type="file"
-                accept=".pdf"
-                onChange={(e) => setRevisionPdf(e.target.files?.[0] || null)}
-                className="block mt-2"
-              />
-            </label>
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs space-y-1 font-mono">
-              <div className="font-semibold text-blue-900 font-sans">ชื่อไฟล์ที่ตั้งอัตโนมัติ:</div>
+            <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-950 leading-relaxed">
+              <p className="font-bold">
+                {course.course_code} {course.course_name} · {course.grade_level}
+              </p>
+              <p>
+                เลือกไฟล์ Excel และ PDF ฉบับแก้ไขให้ครบ 2 ไฟล์ แล้วกดส่งตรวจอีกครั้ง
+                ระบบเก็บไฟล์เดิมไว้ในประวัติ
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <RevisionFilePicker kind="excel" file={revisionExcel} onChange={setRevisionExcel} />
+              <RevisionFilePicker kind="pdf" file={revisionPdf} onChange={setRevisionPdf} />
+            </div>
+            <details className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1 font-mono break-all">
+              <summary className="font-semibold text-blue-900 font-sans">
+                ชื่อไฟล์ที่ระบบจะตั้งให้หลังส่ง
+              </summary>
               <div className="text-emerald-800">· {autoRevExcelName}</div>
               <div className="text-red-800">· {autoRevPdfName}</div>
-            </div>
+            </details>
 
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">
-                บันทึกคำชี้แจงการแก้ไข (แจ้งผู้ตรวจ)
+                บันทึกคำชี้แจงการแก้ไข (ไม่บังคับ)
               </label>
               <textarea
                 value={revisionNotes}
@@ -385,12 +425,17 @@ export const TeacherDetailView: React.FC = () => {
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
+                ref={revisionCancel}
                 type="button"
+                disabled={isSubmittingRev}
                 onClick={() => setShowRevisionModal(false)}
                 className="px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
               >
                 ยกเลิก
               </button>
+              <span className="text-xs text-slate-500 mr-auto">
+                เลือกแล้ว {Number(!!revisionExcel) + Number(!!revisionPdf)}/2 ไฟล์
+              </span>
               <button
                 type="button"
                 onClick={handleConfirmRevision}

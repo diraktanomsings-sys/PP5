@@ -390,7 +390,7 @@ function useServerApp() {
       }, 'กำลังสรุปรายการที่จะลบถาวร…');
       return preview;
     },
-    permanentlyDelete: (preview: PurgePreview, confirmation: string) =>
+    permanentlyDelete: (preview: PurgePreview, confirmation = '') =>
       action(async () => {
         let result: { done: boolean };
         do {
@@ -409,6 +409,15 @@ function useServerApp() {
         await refresh();
       }, 'กำลังลบข้อมูลและไฟล์ถาวร…'),
     driveStorage: snapshot?.drive,
+    cleanupDriveCopies: () =>
+      action(async () => {
+        try {
+          for (const f of current.current?.drive?.retained || [])
+            await api('drive-cleanup', { id: f.id, confirmed: true }, current.current?.role);
+        } finally {
+          await refresh();
+        }
+      }, 'กำลังตรวจไฟล์ใน Drive และคืนพื้นที่สำเนาชั่วคราว…'),
     organizeDrive: () =>
       action(async () => {
         for (const f of current.current?.drive?.unorganized || [])

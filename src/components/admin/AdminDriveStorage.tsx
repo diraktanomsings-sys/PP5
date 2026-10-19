@@ -2,13 +2,15 @@ import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 
 export function AdminDriveStorage() {
-  const { driveStorage, mutate, busy, organizeDrive } = useApp();
+  const { driveStorage, mutate, busy, organizeDrive, cleanupDriveCopies } = useApp();
   const [url, setUrl] = useState(driveStorage?.url || '');
   const [folderId, setFolderId] = useState(
     driveStorage?.folderId || '1_9hk4918HBD1wmy2vK92W83jzYsPbrh4',
   );
   const [confirmed, setConfirmed] = useState(false);
   const [notice, setNotice] = useState('');
+  const [showCleanup, setShowCleanup] = useState(false);
+  const retainedBytes = (driveStorage?.retained || []).reduce((n, f) => n + f.size, 0);
   return (
     <section className="bg-white rounded-2xl border border-blue-200 p-5 space-y-4">
       <h3 className="font-bold text-blue-950">พื้นที่เก็บไฟล์ Google Drive ของโรงเรียน</h3>
@@ -22,6 +24,75 @@ export function AdminDriveStorage() {
           บัญชีตัวรับไฟล์: {driveStorage.ownerEmail} · ไฟล์ที่ส่งแล้วใน Drive{' '}
           {driveStorage.stored || 0} ไฟล์
         </p>
+      )}
+      {driveStorage?.enabled && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 space-y-2 text-xs text-emerald-950">
+          <p className="font-bold">
+            Drive เป็นที่เก็บไฟล์หลัก · ระบบเก็บข้อมูลบัญชี รายวิชา และหลักฐานการอนุมัติไว้
+          </p>
+          <p>
+            Excel, PDF ทุกเวอร์ชัน และไฟล์แนบผลตรวจอยู่ใน Drive
+            ไฟล์ใหม่คืนพื้นที่ชั่วคราวอัตโนมัติหลังยืนยันบันทึกสำเร็จ
+          </p>
+          <p>
+            สำเนาที่รอตรวจเพื่อคืนพื้นที่: {driveStorage.retained?.length || 0} ไฟล์ ·{' '}
+            {(retainedBytes / (1024 * 1024)).toLocaleString('th-TH', { maximumFractionDigits: 2 })}{' '}
+            MB
+          </p>
+          {!!driveStorage.retained?.length && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setShowCleanup(true)}
+              className="rounded-lg bg-emerald-800 px-3 py-2 font-bold text-white"
+            >
+              ตรวจไฟล์ใน Drive และคืนพื้นที่ระบบ
+            </button>
+          )}
+        </div>
+      )}
+      {showCleanup && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="drive-cleanup-title"
+            className="w-full max-w-md rounded-2xl bg-white p-6 space-y-4 shadow-2xl"
+          >
+            <h4 id="drive-cleanup-title" className="font-bold text-blue-950">
+              คืนพื้นที่สำเนาชั่วคราว
+            </h4>
+            <p className="text-sm text-slate-600">
+              ตรวจไฟล์ใน Drive เทียบต้นฉบับก่อนลบสำเนาชั่วคราว {driveStorage?.retained?.length || 0}{' '}
+              ไฟล์ ไฟล์ใน Drive ทุกเวอร์ชัน บัญชี ประวัติ และหลักฐานอนุมัติจะยังอยู่ครบ
+              หากตรวจไฟล์ไม่ผ่านจะเก็บสำเนานั้นไว้
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                autoFocus
+                disabled={busy}
+                onClick={() => setShowCleanup(false)}
+                className="rounded-lg border px-4 py-2 text-sm text-slate-700"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                className="rounded-lg bg-emerald-800 px-4 py-2 text-sm font-bold text-white"
+                onClick={async () => {
+                  if (await cleanupDriveCopies()) {
+                    setShowCleanup(false);
+                    setNotice('ตรวจไฟล์ Drive และคืนพื้นที่สำเนาชั่วคราวสำเร็จ');
+                  }
+                }}
+              >
+                ยืนยันคืนพื้นที่
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {driveStorage?.enabled && (
         <div className="rounded-lg bg-blue-50 p-3 space-y-2 text-xs text-blue-950">

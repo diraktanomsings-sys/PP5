@@ -77,6 +77,7 @@ function fixture() {
     permanentlyDeleted = 0,
     calls = 0,
     shared = false;
+  let removeFailure = false;
   const files = new Map<string, any>();
   const iterator = (values: any[]) => {
     let i = 0;
@@ -211,6 +212,10 @@ function fixture() {
     bytes: async () => bytes,
     read: async () => Readable.from([bytes]),
     remove: async () => {
+      if (removeFailure) {
+        removeFailure = false;
+        throw new Error('Synthetic source cleanup failure');
+      }
       removed++;
     },
   };
@@ -241,6 +246,9 @@ function fixture() {
     context,
     setShared: (v: boolean) => {
       shared = v;
+    },
+    setRemoveFailure: () => {
+      removeFailure = true;
     },
     get removed() {
       return removed;
@@ -438,6 +446,61 @@ test('pending upload source is released only after its verified Drive pointer is
   await storage.release!((await f.store.read()).files[pending.id]);
   assert.equal(f.removed, 1);
 });
+test('only admin can release retained copies after verifying Drive, keeping originals, metadata and retryable failures', async () => {
+  const f = fixture();
+  await f.connect();
+  await fail(
+    () => f.bridge.cleanupSource(f.service, 'admin', 'ADMIN', { id: f.file.id, confirmed: true }),
+    409,
+  );
+  await f.bridge.migrate(f.service, 'admin', 'ADMIN', f.file.id);
+  const saved = (await f.store.read()).files[f.file.id],
+    remote = f.files.get(saved.drive!.id);
+  assert.equal((await f.service.snapshot('admin', 'ADMIN')).drive!.retained!.length, 1);
+  assert.equal((await f.service.snapshot('teacher', 'TEACHER')).drive!.retained, undefined);
+  await fail(
+    () =>
+      f.bridge.cleanupSource(f.service, 'teacher', 'TEACHER', { id: f.file.id, confirmed: true }),
+    403,
+  );
+  await fail(() => f.bridge.cleanupSource(f.service, 'admin', 'ADMIN', { id: f.file.id }), 400);
+  remote.data = Buffer.from('altered');
+  await fail(
+    () => f.bridge.cleanupSource(f.service, 'admin', 'ADMIN', { id: f.file.id, confirmed: true }),
+    409,
+  );
+  assert.equal(f.removed, 0);
+  assert.equal((await f.store.read()).files[f.file.id].sourceReleased, undefined);
+  remote.data = bytes;
+  await f.store.write((s) => {
+    s.storageWrites = { [f.file.id]: { token: 'active', expiresAt: Date.now() + 10000 } };
+  });
+  await fail(
+    () => f.bridge.cleanupSource(f.service, 'admin', 'ADMIN', { id: f.file.id, confirmed: true }),
+    409,
+  );
+  await f.store.write((s) => {
+    s.storageWrites = {};
+  });
+  f.setRemoveFailure();
+  await assert.rejects(
+    () => f.bridge.cleanupSource(f.service, 'admin', 'ADMIN', { id: f.file.id, confirmed: true }),
+    /Synthetic source cleanup failure/,
+  );
+  assert.equal((await f.store.read()).files[f.file.id].sourceReleased, undefined);
+  assert.deepEqual((await f.store.read()).storageWrites, {});
+  await f.bridge.cleanupSource(f.service, 'admin', 'ADMIN', { id: f.file.id, confirmed: true });
+  await f.bridge.cleanupSource(f.service, 'admin', 'ADMIN', { id: f.file.id, confirmed: true });
+  assert.equal(f.removed, 1);
+  assert.equal(f.permanentlyDeleted, 0);
+  assert.ok(f.files.has(saved.drive!.id));
+  assert.equal((await f.store.read()).files[f.file.id].sha256, saved.sha256);
+  assert.equal(
+    digest(await f.bridge.bytes((await f.store.read()).files[f.file.id])),
+    digest(bytes),
+  );
+  assert.equal((await f.service.snapshot('admin', 'ADMIN')).drive!.retained!.length, 0);
+});
 test('modified files and a public root fail reads and are never silently substituted', async () => {
   const f = fixture();
   await f.connect();
@@ -576,6 +639,78 @@ test('HTTP job endpoint permits only one-use capabilities, while settings retain
       ).status,
       401,
     );
+    await f.connect();
+    await f.bridge.migrate(f.service, 'admin', 'ADMIN', f.file.id);
+    const body = { id: f.file.id, confirmed: true };
+    assert.equal(
+      (await post('drive-cleanup', body, { cookie: 'pp5_session=admin', 'x-pp5-role': 'ADMIN' }))
+        .status,
+      403,
+    );
+    assert.equal(
+      (
+        await post('drive-cleanup', body, {
+          origin: 'http://localhost',
+          cookie: 'pp5_session=teacher',
+          'x-pp5-role': 'TEACHER',
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await post('drive-cleanup', body, {
+          origin: 'http://localhost',
+          cookie: 'pp5_session=admin',
+          'x-pp5-role': 'ADMIN',
+        })
+      ).status,
+      200,
+    );
+    assert.equal(f.removed, 1);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+test('HTTP upload releases its temporary copy only after verified Drive persistence; failed Drive retains it', async () => {
+  const f = fixture();
+  await f.connect();
+  await f.store.write((s) => {
+    s.files[f.file.id].used = false;
+    s.files[f.file.id].ready = false;
+    s.files[f.file.id].sha256 = '';
+  });
+  const storage = { ...f.bridge.storage(), kind: 'local' as const, write: async () => {} };
+  const server = createHttp(f.service, storage, 'http://localhost', f.bridge).listen(
+    0,
+    '127.0.0.1',
+  );
+  await new Promise<void>((resolve) => server.once('listening', resolve));
+  const endpoint = `http://127.0.0.1:${(server.address() as any).port}/api/pp5?action=upload&id=${f.file.id}`;
+  const upload = () =>
+    fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        origin: 'http://localhost',
+        cookie: 'pp5_session=teacher',
+        'x-pp5-role': 'TEACHER',
+        'Content-Type': 'application/octet-stream',
+      },
+      body: bytes,
+    });
+  try {
+    f.setShared(true);
+    assert.equal((await upload()).status, 409);
+    assert.equal(f.removed, 0);
+    assert.equal((await f.store.read()).files[f.file.id].ready, false);
+    f.setShared(false);
+    assert.equal((await upload()).status, 200);
+    const saved = (await f.store.read()).files[f.file.id];
+    assert.equal(saved.ready, true);
+    assert.equal(saved.sourceReleased, true);
+    assert.equal(f.removed, 1);
+    assert.equal(digest(await f.bridge.bytes(saved)), digest(bytes));
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

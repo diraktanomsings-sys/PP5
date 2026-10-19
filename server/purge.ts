@@ -186,9 +186,9 @@ export async function purgeStep(
   const task = await service.store.write((s) => {
     const admin = authorize(service, s, token, role, body.kind, body.id);
     requireThat(
-      body.confirmed === true && body.confirmation === 'ลบถาวร',
+      body.confirmed === true && (body.kind === 'submission' || body.confirmation === 'ลบถาวร'),
       400,
-      'พิมพ์ ลบถาวร เพื่อยืนยัน',
+      body.kind === 'submission' ? 'กรุณายืนยันลบงานและไฟล์' : 'พิมพ์ ลบถาวร เพื่อยืนยัน',
     );
     requireThat(body.kind !== 'user' || body.id !== admin.id, 400, 'ลบบัญชีตนเองไม่ได้');
     const p = plan(s, body.kind, body.id);

@@ -14,7 +14,6 @@ export function TeacherDeleteSubmission({
 }) {
   const { previewPurge, permanentlyDelete, busy } = useApp();
   const [preview, setPreview] = useState<PurgePreview>();
-  const [confirmation, setConfirmation] = useState('');
   const dialog = useRef<HTMLDivElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -35,7 +34,6 @@ export function TeacherDeleteSubmission({
         onClick={async () => {
           const p = await previewPurge('submission', id);
           if (p) {
-            setConfirmation('');
             setPreview(p);
           }
         }}
@@ -79,15 +77,6 @@ export function TeacherDeleteSubmission({
             {preview.continuing && (
               <p className="text-amber-800">การลบครั้งก่อนยังไม่เสร็จ กดยืนยันเพื่อดำเนินการต่อ</p>
             )}
-            <label className="block text-slate-700">
-              พิมพ์ <strong>ลบถาวร</strong> เพื่อยืนยัน
-              <input
-                value={confirmation}
-                onChange={(e) => setConfirmation(e.target.value)}
-                autoComplete="off"
-                className="mt-2 w-full rounded-lg border border-slate-300 p-2"
-              />
-            </label>
             <div className="flex justify-end gap-2">
               <button
                 ref={cancel}
@@ -100,10 +89,10 @@ export function TeacherDeleteSubmission({
               </button>
               <button
                 type="button"
-                disabled={busy || confirmation !== 'ลบถาวร'}
+                disabled={busy}
                 className="rounded-lg bg-red-700 px-4 py-2 text-white font-bold disabled:opacity-40"
                 onClick={async () => {
-                  if (await permanentlyDelete(preview, confirmation)) setPreview(undefined);
+                  if (await permanentlyDelete(preview)) setPreview(undefined);
                 }}
               >
                 ลบงานและไฟล์ถาวร
