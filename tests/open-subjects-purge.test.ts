@@ -118,6 +118,36 @@ function fixture() {
       service.configure('admin', 'ADMIN', action, { id, confirmed: true }),
   };
 }
+test('admin creates and restores a course without a teacher; actual sender becomes its owner', async () => {
+  const f = fixture();
+  const body = {
+    termId: 'term',
+    code: 'UNASSIGNED',
+    name: 'วิชาเลือก',
+    grade: 'ป.2/1',
+    reviewerId: 'b',
+  };
+  await denied(
+    () => f.service.configure('admin', 'ADMIN', 'course', { ...body, teacherId: 'missing' }),
+    400,
+  );
+  await f.service.configure('admin', 'ADMIN', 'course', body);
+  const course = (await f.store.read()).courses.find((c) => c.code === 'UNASSIGNED')!;
+  assert.equal(course.teacherId, '');
+  await f.configure('course-delete', course.id);
+  await f.configure('course-restore', course.id);
+  await f.service.configure('admin', 'ADMIN', 'course-open', { id: course.id, open: true });
+  assert.ok((await f.service.snapshot('b', 'TEACHER')).courses.some((c) => c.id === course.id));
+  const files = await f.pair('b', course.id);
+  await f.service.submit('b', 'TEACHER', { courseId: course.id, ...files, confirmed: true });
+  const saved = (await f.store.read()).courses.find((c) => c.id === course.id)!;
+  assert.equal(saved.teacherId, 'b');
+  assert.equal(saved.reviewerId, '');
+  await denied(
+    () => f.service.configure('admin', 'ADMIN', 'course-edit', { id: course.id, teacherId: '' }),
+    409,
+  );
+});
 test('teachers select any open unsubmitted subject across departments; first committed sender owns the course and other documents remain private', async () => {
   const f = fixture();
   const s = await f.service.snapshot('b', 'TEACHER');
