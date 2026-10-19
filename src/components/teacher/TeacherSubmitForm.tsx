@@ -36,7 +36,10 @@ export const TeacherSubmitForm: React.FC = () => {
   } = useApp();
 
   const myCourses = courses.filter(
-    (c) => c.teacher_id === currentUser.id && c.term_id === activeTerm.id,
+    (c) =>
+      c.term_id === activeTerm.id &&
+      c.is_open_submission &&
+      !submissions.some((s) => s.course_id === c.id),
   );
   const [selectedCourseId, setSelectedCourseId] = useState<string>(myCourses[0]?.id || '');
   const selectedCourse = myCourses.find((c) => c.id === selectedCourseId) || myCourses[0];
@@ -68,7 +71,7 @@ export const TeacherSubmitForm: React.FC = () => {
     setHasExcel(false);
     setHasPdf(false);
     setIsConfirmed(false);
-  }, [selectedCourseId, activeTerm.year, activeTerm.semester]);
+  }, [selectedCourse?.id, activeTerm.year, activeTerm.semester]);
 
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -128,7 +131,8 @@ export const TeacherSubmitForm: React.FC = () => {
   if (!selectedCourse)
     return (
       <div className="p-8 bg-white rounded-2xl border text-slate-600">
-        ยังไม่มีรายวิชาที่มอบหมายให้คุณในภาคเรียนนี้ กรุณาติดต่อผู้ดูแลระบบ
+        ไม่มีรายวิชาที่ยังเปิดรับและยังไม่ส่งในภาคเรียนนี้
+        หากต้องแก้ไขงานที่ส่งแล้วให้เปิดติดตามผลตรวจ
       </div>
     );
   return (
@@ -178,6 +182,10 @@ export const TeacherSubmitForm: React.FC = () => {
           </div>
         </div>
       </div>
+      <p className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs leading-relaxed text-blue-900">
+        เลือกได้ทุกวิชาที่เปิดรับ แม้เป็นคนละกลุ่มสาระ ระบบจะบันทึกคุณเป็นครูผู้ส่งเมื่อส่งสำเร็จ
+        วิชาที่มีครูท่านอื่นส่งแล้วจะไม่เปิดให้ส่งทับ
+      </p>
 
       {errorMsg && (
         <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-center gap-2 animate-in fade-in">
@@ -221,6 +229,7 @@ export const TeacherSubmitForm: React.FC = () => {
                   ระดับชั้นเรียน <span className="text-rose-500">*</span>
                 </label>
                 <select
+                  aria-label="เลือกระดับชั้นเรียน"
                   value={selectedCourse.grade_level}
                   onChange={(e) => {
                     const match = myCourses.find((c) => c.grade_level === e.target.value);
@@ -241,13 +250,14 @@ export const TeacherSubmitForm: React.FC = () => {
                   กลุ่มสาระ / รายวิชา <span className="text-rose-500">*</span>
                 </label>
                 <select
-                  value={selectedCourseId}
+                  aria-label="เลือกรายวิชาที่ต้องการส่ง"
+                  value={selectedCourse.id}
                   onChange={(e) => setSelectedCourseId(e.target.value)}
                   className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                 >
                   {myCourses.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.course_name} ({c.course_code})
+                      {c.course_name} ({c.course_code}) · {c.grade_level}
                     </option>
                   ))}
                 </select>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { WorkflowStepper } from '../common/WorkflowStepper';
 import { StatusBadge } from '../common/StatusBadge';
@@ -58,11 +58,8 @@ export const ReviewerVerifyView: React.FC = () => {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [annotatedFile, setAnnotatedFile] = useState<File | null>(null);
-  const [annotatedFileName, setAnnotatedFileName] = useState(
-    course
-      ? `คอมเมนต์ตรวจ_ปพ5_${course.course_code}_${currentVer?.version_number}_highlighted.pdf`
-      : '',
-  );
+  const [annotationError, setAnnotationError] = useState('');
+  const annotationInput = useRef<HTMLInputElement>(null);
 
   const [reviewSuccessMsg, setReviewSuccessMsg] = useState<string | null>(null);
 
@@ -102,6 +99,11 @@ export const ReviewerVerifyView: React.FC = () => {
 
   const handleConfirmReject = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!rejectReason.trim()) {
+      setAnnotationError('กรุณาระบุรายละเอียดจุดบกพร่อง');
+      return;
+    }
+    if (annotationError) return;
     if (
       !(await reviewSubmission(
         submission.id,
@@ -425,6 +427,7 @@ export const ReviewerVerifyView: React.FC = () => {
                 รายละเอียดจุดบกพร่องที่ต้องแก้ไข *
               </label>
               <textarea
+                aria-label="รายละเอียดจุดบกพร่องที่ต้องแก้ไข"
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
                 rows={4}
@@ -438,8 +441,54 @@ export const ReviewerVerifyView: React.FC = () => {
               </label>
               <div className="flex items-center gap-2 text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
                 <Paperclip className="w-4 h-4 text-slate-500" />
-                <span className="font-mono text-slate-700 truncate">{annotatedFileName}</span>
+                <input
+                  ref={annotationInput}
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  aria-label="แนบ PDF ผลตรวจส่งกลับให้ครู"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    setAnnotatedFile(null);
+                    setAnnotationError('');
+                    if (!f) return;
+                    if (!/\.pdf$/i.test(f.name) || !f.size || f.size > 25 * 1024 * 1024) {
+                      setAnnotationError('เลือกไฟล์ PDF ที่มีข้อมูลและขนาดไม่เกิน 25 MB');
+                      e.target.value = '';
+                      return;
+                    }
+                    setAnnotatedFile(f);
+                  }}
+                  className="w-full min-w-0 text-slate-700"
+                />
               </div>
+              {(annotatedFile || annotationError) && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                  <span>
+                    {annotatedFile
+                      ? `${annotatedFile.name} · ${(annotatedFile.size / 1024 / 1024).toFixed(2)} MB`
+                      : 'ยังไม่ได้แนบไฟล์ที่ใช้ได้'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAnnotatedFile(null);
+                      setAnnotationError('');
+                      if (annotationInput.current) annotationInput.current.value = '';
+                    }}
+                    className="text-rose-700 underline"
+                  >
+                    นำไฟล์แนบออก
+                  </button>
+                </div>
+              )}
+              <p className="mt-2 text-[11px] text-slate-500">
+                แนบ PDF ที่มีข้อเสนอแนะได้ ไม่จำเป็นต้องแนบ ครูจะดาวน์โหลดได้หลังยืนยันส่งกลับสำเร็จ
+              </p>
+              {annotationError && (
+                <p role="alert" className="mt-2 text-xs text-rose-700">
+                  {annotationError}
+                </p>
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
@@ -453,6 +502,7 @@ export const ReviewerVerifyView: React.FC = () => {
               <button
                 type="button"
                 onClick={handleConfirmReject}
+                disabled={!rejectReason.trim() || !!annotationError}
                 className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-xs flex items-center gap-2 cursor-pointer"
               >
                 <XCircle className="w-4 h-4" />

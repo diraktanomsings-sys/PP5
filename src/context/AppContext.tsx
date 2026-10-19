@@ -8,7 +8,7 @@ import type {
   PP5Submission,
   AuditLog,
 } from '../types/schema';
-import type { Person, Snapshot, SessionPayload } from '../production/types';
+import type { Person, Snapshot, SessionPayload, PurgePreview } from '../production/types';
 import { api, fileUrl, uploadFile, RequestError } from '../production/api';
 import schoolLogo from '../assets/schoolLogo';
 
@@ -380,6 +380,34 @@ function useServerApp() {
     refresh,
     action,
     mutate,
+    previewPurge: async (kind: PurgePreview['kind'], id: string) => {
+      let preview: PurgePreview | undefined;
+      await action(async () => {
+        preview = await api<PurgePreview>('purge-preview', undefined, current.current?.role, {
+          kind,
+          id,
+        });
+      }, 'กำลังสรุปรายการที่จะลบถาวร…');
+      return preview;
+    },
+    permanentlyDelete: (preview: PurgePreview, confirmation: string) =>
+      action(async () => {
+        let result: { done: boolean };
+        do {
+          result = await api(
+            'purge',
+            {
+              kind: preview.kind,
+              id: preview.id,
+              planHash: preview.planHash,
+              confirmation,
+              confirmed: true,
+            },
+            current.current?.role,
+          );
+        } while (!result.done);
+        await refresh();
+      }, 'กำลังลบข้อมูลและไฟล์ถาวร…'),
     driveStorage: snapshot?.drive,
     verifyCredentials,
     logout,

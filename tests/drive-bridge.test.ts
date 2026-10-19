@@ -63,6 +63,7 @@ function fixture() {
     },
   };
   let removed = 0,
+    permanentlyDeleted = 0,
     calls = 0,
     shared = false;
   const files = new Map<string, any>();
@@ -121,6 +122,29 @@ function fixture() {
     },
     UrlFetchApp: {
       fetch: (target: string, init: any) => {
+        if (target.startsWith('https://www.googleapis.com/drive/v3/files/')) {
+          assert.equal(init.headers.Authorization, 'Bearer test-only-oauth-token');
+          assert.equal(init.followRedirects, false);
+          const id = new URL(target).pathname.split('/').pop()!;
+          const file = files.get(id);
+          if (!file) return { getResponseCode: () => 404, getContentText: () => '{}' };
+          if (init.method === 'delete') {
+            files.delete(id);
+            permanentlyDeleted++;
+            return { getResponseCode: () => 204, getContentText: () => '' };
+          }
+          return {
+            getResponseCode: () => 200,
+            getContentText: () =>
+              JSON.stringify({
+                id,
+                name: file.name,
+                size: String(file.data.length),
+                parents: [file.outside ? 'another-folder' : folderId],
+                mimeType: file.folder ? 'application/vnd.google-apps.folder' : 'application/pdf',
+              }),
+          };
+        }
         assert.equal(target, 'https://pp-5-gray.vercel.app/api/pp5?action=drive-job');
         assert.equal(init.followRedirects, false);
         return { getResponseCode: () => 200, getContentText: () => JSON.stringify(payload) };
@@ -138,6 +162,7 @@ function fixture() {
     },
     LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
     Session: { getEffectiveUser: () => ({ getEmail: () => 'school@example.test' }) },
+    ScriptApp: { getOAuthToken: () => 'test-only-oauth-token' },
   });
   vm.runInContext(
     readFileSync(new URL('../google-drive/Code.gs', import.meta.url), 'utf8'),
@@ -183,6 +208,9 @@ function fixture() {
     get calls() {
       return calls;
     },
+    get permanentlyDeleted() {
+      return permanentlyDeleted;
+    },
   };
 }
 test('school script verifies create/read and trashes only its synthetic probe before enabling Drive', async () => {
@@ -194,6 +222,61 @@ test('school script verifies create/read and trashes only its synthetic probe be
   assert.equal(f.files.size, 1);
   assert.ok([...f.files.values()][0].trashed);
   assert.deepEqual(s.driveJobs, {});
+});
+test('permanent Drive deletion requires a persisted purge, deletes only bound school files and retries safely', async () => {
+  const f = fixture();
+  await f.connect();
+  await f.bridge.migrate(f.service, 'admin', 'ADMIN', f.file.id);
+  const saved = (await f.store.read()).files[f.file.id];
+  await fail(() => f.bridge.storage().remove!(saved), 403);
+  await f.store.write((s) => {
+    s.purges = {
+      'course:course': {
+        kind: 'course',
+        targetId: 'course',
+        fileIds: [saved.id],
+        removed: [],
+        startedAt: '',
+        planHash: 'test',
+      },
+    };
+  });
+  const remote = f.files.get(saved.drive!.id)!;
+  remote.outside = true;
+  await fail(() => f.bridge.remove(saved), 409);
+  assert.equal(f.permanentlyDeleted, 0);
+  assert.equal(f.removed, 0);
+  remote.outside = false;
+  remote.folder = true;
+  await fail(() => f.bridge.remove(saved), 409);
+  remote.folder = false;
+  await f.bridge.remove(saved);
+  assert.equal(f.files.has(saved.drive!.id), false);
+  assert.equal(f.permanentlyDeleted, 1);
+  assert.equal(f.removed, 1);
+  await f.bridge.remove(saved);
+  assert.equal(f.permanentlyDeleted, 1);
+});
+test('purging an upload without a saved Drive pointer finds only its exact managed UUID filename', async () => {
+  const f = fixture();
+  await f.connect();
+  await f.bridge.persist(f.file, bytes);
+  await f.store.write((s) => {
+    delete s.files[f.file.id].drive;
+    s.files[f.file.id].sha256 = '';
+    s.purges = {
+      'course:course': {
+        kind: 'course',
+        targetId: 'course',
+        fileIds: [f.file.id],
+        removed: [],
+        startedAt: '',
+        planHash: 'test',
+      },
+    };
+  });
+  await f.bridge.remove((await f.store.read()).files[f.file.id]);
+  assert.equal(f.permanentlyDeleted, 1);
 });
 test('only admin can connect a restricted folder and unsuccessful probes keep configuration unchanged', async () => {
   const f = fixture();
