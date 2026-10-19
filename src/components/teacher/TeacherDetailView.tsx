@@ -32,6 +32,7 @@ export const TeacherDetailView: React.FC = () => {
     assignments,
     users,
     currentUser,
+    currentRole,
     setActiveView,
     submitRevision,
     activeTerm,
@@ -100,11 +101,11 @@ export const TeacherDetailView: React.FC = () => {
       {/* Top back & actions bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <button
-          onClick={() => setActiveView('teacher/dashboard')}
+          onClick={() => setActiveView(`${currentRole.toLowerCase()}/dashboard`)}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>กลับหน้าภาพรวมครู</span>
+          <span>กลับหน้าภาพรวม</span>
         </button>
 
         <div className="flex items-center gap-2">
