@@ -1,1 +1,31 @@
-@import "tailwindcss";
+@import 'tailwindcss';
+.pp5-pdf .pdf-reader {
+  padding: 1rem;
+  background: #e2e8f0;
+}
+.pp5-pdf canvas {
+  max-width: 100%;
+  height: auto;
+  margin: 1rem auto;
+  background: white;
+  box-shadow: 0 2px 10px #0002;
+}
+.pp5-pdf .actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+}
+.pp5-pdf .actions button {
+  background: white;
+  border: 1px solid #94a3b8;
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+.pp5-pdf .actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
