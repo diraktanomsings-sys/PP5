@@ -8,7 +8,7 @@ import type {
   PP5Submission,
   AuditLog,
 } from '../types/schema';
-import type { Person, Snapshot } from '../production/types';
+import type { Person, Snapshot, SessionPayload } from '../production/types';
 import { api, fileUrl, uploadFile, RequestError } from '../production/api';
 import schoolLogo from '../assets/schoolLogo';
 
@@ -66,18 +66,17 @@ function useServerApp() {
   const refresh = async (role?: UserRole, navigate = false) => {
     const sequence = ++generation.current;
     try {
-      const health = await api('health');
+      const health = await api<SessionPayload>('session', undefined, role ?? current.current?.role);
       if (sequence !== generation.current) return;
       setReady(health.ready);
       setInitialized(health.initialized);
       setPublicLogo(health.schoolLogo || '');
-      if (!health.initialized) {
+      if (!health.snapshot) {
         setSnapshot(undefined);
         setActiveView('login');
         return;
       }
-      const s = await api<Snapshot>('state', undefined, role ?? current.current?.role);
-      if (sequence !== generation.current) return;
+      const s = health.snapshot;
       setSnapshot(s);
       if (navigate) setActiveView(s.user.roles.length > 1 && !role ? 'select-role' : home(s.role));
     } catch (e) {

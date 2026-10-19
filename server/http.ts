@@ -66,6 +66,9 @@ export function createHttp(
     );
 
   app.all('/api/pp5', async (req, res) => {
+    const started = performance.now();
+    const timedJson = (body: unknown) =>
+      res.set('Server-Timing', `app;dur=${(performance.now() - started).toFixed(1)}`).json(body);
     try {
       const action = String(req.query.action || 'state');
       if (req.method === 'POST' && action === 'drive-job') {
@@ -84,9 +87,29 @@ export function createHttp(
         return;
       }
       if (req.method === 'GET') {
+        if (action === 'session') {
+          // Read once for public startup status and the existing role-filtered snapshot.
+          // Never cache identities or authorization between requests.
+          const s = await service.store.read();
+          let snapshot;
+          if (token(req)) {
+            try {
+              snapshot = await service.snapshot(token(req), role(req), s);
+            } catch (error) {
+              if (!(error instanceof ApiError && error.status === 401)) throw error;
+            }
+          }
+          timedJson({
+            ready: true,
+            initialized: s.users.length > 0,
+            schoolLogo: s.settings?.schoolLogo || '',
+            ...(snapshot ? { snapshot } : {}),
+          });
+          return;
+        }
         if (action === 'health') {
           const s = await service.store.read();
-          res.json({
+          timedJson({
             ready: true,
             initialized: s.users.length > 0,
             schoolLogo: s.settings?.schoolLogo || '',
@@ -94,7 +117,7 @@ export function createHttp(
           return;
         }
         if (action === 'state') {
-          res.json(await service.snapshot(token(req), role(req)));
+          timedJson(await service.snapshot(token(req), role(req)));
           return;
         }
         if (action === 'signed') {

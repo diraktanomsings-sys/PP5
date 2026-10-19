@@ -130,6 +130,12 @@ export interface SchoolSettings {
   organizationDriveUrl?: string;
   organizationDriveTitle?: string;
 }
+export interface SessionPayload {
+  ready: boolean;
+  initialized: boolean;
+  schoolLogo: string;
+  snapshot?: Snapshot;
+}
 export const roleNames: Record<Role, string> = {
   TEACHER: 'ครูผู้สอน',
   REVIEWER: 'ผู้ตรวจเอกสาร',

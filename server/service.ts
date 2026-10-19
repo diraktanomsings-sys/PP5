@@ -216,8 +216,8 @@ export class Service {
         (role === 'REVIEWER' && c.reviewerId === user.id && c.teacherId !== user.id))
     );
   }
-  async snapshot(token: string, selected?: Role): Promise<Snapshot> {
-    const s = await this.store.read();
+  async snapshot(token: string, selected?: Role, state?: State): Promise<Snapshot> {
+    const s = state ?? (await this.store.read());
     const user = this.identity(s, token);
     const role = selected || user.roles[0];
     this.actor(s, token, role);

@@ -5,29 +5,68 @@ import { TopNavbar } from './components/common/TopNavbar';
 import { LoginView } from './components/auth/LoginView';
 import { RoleSelectionView } from './components/auth/RoleSelectionView';
 import { AccessDeniedView } from './components/common/AccessDeniedView';
+import { ViewBoundary } from './production/ViewBoundary';
 
 // Teacher Components
-import { TeacherDashboard } from './components/teacher/TeacherDashboard';
-import { TeacherSubmitForm } from './components/teacher/TeacherSubmitForm';
-import { TeacherDetailView } from './components/teacher/TeacherDetailView';
+const TeacherDashboard = React.lazy(() =>
+  import('./components/teacher/TeacherDashboard').then((m) => ({ default: m.TeacherDashboard })),
+);
+const TeacherSubmitForm = React.lazy(() =>
+  import('./components/teacher/TeacherSubmitForm').then((m) => ({ default: m.TeacherSubmitForm })),
+);
+const TeacherDetailView = React.lazy(() =>
+  import('./components/teacher/TeacherDetailView').then((m) => ({ default: m.TeacherDetailView })),
+);
 
 // Reviewer Components
-import { ReviewerDashboard } from './components/reviewer/ReviewerDashboard';
-import { ReviewerVerifyView } from './components/reviewer/ReviewerVerifyView';
+const ReviewerDashboard = React.lazy(() =>
+  import('./components/reviewer/ReviewerDashboard').then((m) => ({ default: m.ReviewerDashboard })),
+);
+const ReviewerVerifyView = React.lazy(() =>
+  import('./components/reviewer/ReviewerVerifyView').then((m) => ({
+    default: m.ReviewerVerifyView,
+  })),
+);
 
 // Executive Components
-import { ExecutiveDashboard } from './components/executive/ExecutiveDashboard';
-import { ExecutiveApproveView } from './components/executive/ExecutiveApproveView';
+const ExecutiveDashboard = React.lazy(() =>
+  import('./components/executive/ExecutiveDashboard').then((m) => ({
+    default: m.ExecutiveDashboard,
+  })),
+);
+const ExecutiveApproveView = React.lazy(() =>
+  import('./components/executive/ExecutiveApproveView').then((m) => ({
+    default: m.ExecutiveApproveView,
+  })),
+);
 
 // Admin Components
-import { AdminDashboard } from './components/admin/AdminDashboard';
-import { AdminCourses } from './components/admin/AdminCourses';
-import { AdminTerms } from './components/admin/AdminTerms';
-import { AdminUsers } from './components/admin/AdminUsers';
-import { AdminAssignReviewers } from './components/admin/AdminAssignReviewers';
-import { AdminCalendar } from './components/admin/AdminCalendar';
-import { AdminArchive } from './components/admin/AdminArchive';
-import { AdminAuditLogs } from './components/admin/AdminAuditLogs';
+const AdminDashboard = React.lazy(() =>
+  import('./components/admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard })),
+);
+const AdminCourses = React.lazy(() =>
+  import('./components/admin/AdminCourses').then((m) => ({ default: m.AdminCourses })),
+);
+const AdminTerms = React.lazy(() =>
+  import('./components/admin/AdminTerms').then((m) => ({ default: m.AdminTerms })),
+);
+const AdminUsers = React.lazy(() =>
+  import('./components/admin/AdminUsers').then((m) => ({ default: m.AdminUsers })),
+);
+const AdminAssignReviewers = React.lazy(() =>
+  import('./components/admin/AdminAssignReviewers').then((m) => ({
+    default: m.AdminAssignReviewers,
+  })),
+);
+const AdminCalendar = React.lazy(() =>
+  import('./components/admin/AdminCalendar').then((m) => ({ default: m.AdminCalendar })),
+);
+const AdminArchive = React.lazy(() =>
+  import('./components/admin/AdminArchive').then((m) => ({ default: m.AdminArchive })),
+);
+const AdminAuditLogs = React.lazy(() =>
+  import('./components/admin/AdminAuditLogs').then((m) => ({ default: m.AdminAuditLogs })),
+);
 
 const MainAppLayout: React.FC = () => {
   const {
@@ -196,7 +235,17 @@ const MainAppLayout: React.FC = () => {
             </div>
           )}
           <fieldset disabled={busy} className="min-w-0 contents">
-            {renderActiveView()}
+            <ViewBoundary key={activeView}>
+              <React.Suspense
+                fallback={
+                  <p role="status" className="p-6 text-sm text-slate-600">
+                    กำลังเปิดหน้า…
+                  </p>
+                }
+              >
+                {renderActiveView()}
+              </React.Suspense>
+            </ViewBoundary>
           </fieldset>
         </main>
 
