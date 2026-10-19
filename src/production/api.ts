@@ -29,10 +29,11 @@ export async function uploadFile(
   kind: 'excel' | 'pdf',
   courseId: string,
   snapshot: Snapshot,
+  purpose?: 'annotation',
 ): Promise<FileRecord> {
   const intent = await api(
     'reserve',
-    { name: file.name, size: file.size, kind, courseId },
+    { name: file.name, size: file.size, kind, courseId, purpose },
     snapshot.role,
   );
   if (snapshot.storage === 'blob') {
