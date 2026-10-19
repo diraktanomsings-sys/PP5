@@ -4,7 +4,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/pp5.ts": { "maxDuration": 60, "excludeFiles": "{audit/**,tests/**,.pp5-local/**}" }
+    "api/pp5.ts": { "maxDuration": 180, "excludeFiles": "{audit/**,tests/**,.pp5-local/**}" }
   },
   "headers": [
     {
