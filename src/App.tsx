@@ -6,6 +6,7 @@ import { LoginView } from './components/auth/LoginView';
 import { RoleSelectionView } from './components/auth/RoleSelectionView';
 import { AccessDeniedView } from './components/common/AccessDeniedView';
 import { ViewBoundary } from './production/ViewBoundary';
+import { LoadingOverlay } from './components/common/LoadingOverlay';
 
 // Teacher Components
 const TeacherDashboard = React.lazy(() =>
@@ -236,13 +237,7 @@ const MainAppLayout: React.FC = () => {
           )}
           <fieldset disabled={busy} className="min-w-0 contents">
             <ViewBoundary key={activeView}>
-              <React.Suspense
-                fallback={
-                  <p role="status" className="p-6 text-sm text-slate-600">
-                    กำลังเปิดหน้า…
-                  </p>
-                }
-              >
+              <React.Suspense fallback={<LoadingOverlay message="กำลังเปิดหน้า…" />}>
                 {renderActiveView()}
               </React.Suspense>
             </ViewBoundary>
@@ -263,10 +258,21 @@ const MainAppLayout: React.FC = () => {
   );
 };
 
+function AppWithLoading() {
+  const { waitingMessage } = useApp();
+  return (
+    <>
+      <div aria-busy={!!waitingMessage} inert={!!waitingMessage}>
+        <MainAppLayout />
+      </div>
+      {waitingMessage && <LoadingOverlay message={waitingMessage} />}
+    </>
+  );
+}
 export default function App() {
   return (
     <AppProvider>
-      <MainAppLayout />
+      <AppWithLoading />
     </AppProvider>
   );
 }

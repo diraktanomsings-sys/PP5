@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AdminDeletionTools } from './AdminDeletionTools';
 import { useApp } from '../../context/AppContext';
 import { Course } from '../../types/schema';
 import {
@@ -157,6 +158,7 @@ export const AdminCourses: React.FC = () => {
         </div>
       </div>
 
+      <AdminDeletionTools kind="course" />
       {successMsg && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs flex items-center gap-2 animate-in fade-in">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />

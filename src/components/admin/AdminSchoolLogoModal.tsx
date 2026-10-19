@@ -185,6 +185,14 @@ export const AdminSchoolLogoModal: React.FC<AdminSchoolLogoModalProps> = ({ isOp
 
             <div
               onClick={() => fileInputRef.current?.click()}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
               className="border-2 border-dashed border-blue-300 hover:border-blue-600 rounded-2xl p-6 text-center bg-blue-50/40 hover:bg-blue-50/80 transition-colors cursor-pointer space-y-2 group"
             >
               <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 mx-auto flex items-center justify-center group-hover:scale-110 transition-transform">

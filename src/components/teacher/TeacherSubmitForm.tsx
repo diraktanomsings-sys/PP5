@@ -326,6 +326,14 @@ export const TeacherSubmitForm: React.FC = () => {
 
                 <div
                   onClick={() => excelInputRef.current?.click()}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      excelInputRef.current?.click();
+                    }
+                  }}
                   className="border-2 border-dashed border-slate-300 rounded-xl p-5 text-center bg-white hover:border-emerald-500 transition-colors cursor-pointer"
                 >
                   <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 mx-auto flex items-center justify-center mb-2">
@@ -401,6 +409,14 @@ export const TeacherSubmitForm: React.FC = () => {
 
                 <div
                   onClick={() => pdfInputRef.current?.click()}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      pdfInputRef.current?.click();
+                    }
+                  }}
                   className="border-2 border-dashed border-slate-300 rounded-xl p-5 text-center bg-white hover:border-rose-500 transition-colors cursor-pointer"
                 >
                   <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 mx-auto flex items-center justify-center mb-2">

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AdminDeletionTools } from './AdminDeletionTools';
 import { useApp } from '../../context/AppContext';
 import { AcademicTerm } from '../../types/schema';
 import { Calendar, Plus, CheckCircle2, Archive, Clock, Check, AlertCircle } from 'lucide-react';
@@ -59,6 +60,7 @@ export const AdminTerms: React.FC = () => {
         </div>
       )}
 
+      <AdminDeletionTools kind="term" />
       {/* Terms Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {academicTerms.map((term) => {

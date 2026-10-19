@@ -237,7 +237,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
       {/* Mobile Backdrop */}
       {isMobileOpen && (
-        <div
+        <button
+          type="button"
+          aria-label="ปิดเมนูด้านข้าง"
           onClick={onMobileClose}
           className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs lg:hidden animate-in fade-in"
         />

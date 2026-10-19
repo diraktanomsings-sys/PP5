@@ -14,7 +14,7 @@ export const CertificateHashModal: React.FC<CertificateHashModalProps> = ({
   course,
   onClose,
 }) => {
-  const { schoolLogoUrl, downloadSigned, users } = useApp();
+  const { schoolLogoUrl, downloadSigned, archiveUsers: users } = useApp();
   const [copied, setCopied] = useState(false);
 
   const hash = submission.digital_certificate_hash || '';

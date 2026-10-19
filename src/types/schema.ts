@@ -1,6 +1,7 @@
 export type UserRole = 'TEACHER' | 'REVIEWER' | 'EXECUTIVE' | 'ADMIN';
 
 export interface User {
+  deleted_at?: string;
   id: string;
   citizen_id: string;
   teacher_id: string;
@@ -17,6 +18,7 @@ export interface User {
 }
 
 export interface AcademicTerm {
+  deleted_at?: string;
   id: string;
   year: number; // เช่น 2569
   semester: number; // 1 หรือ 2
@@ -28,6 +30,7 @@ export interface AcademicTerm {
 }
 
 export interface Course {
+  deleted_at?: string;
   id: string;
   term_id: string;
   course_code: string; // เช่น ท13101
