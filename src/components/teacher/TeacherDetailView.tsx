@@ -36,6 +36,7 @@ export const TeacherDetailView: React.FC = () => {
     setActiveView,
     submitRevision,
     activeTerm,
+    academicTerms,
     organizationDriveUrl,
     organizationDriveFolderId,
   } = useApp();
@@ -76,8 +77,9 @@ export const TeacherDetailView: React.FC = () => {
   const currentVer = submission.versions[0];
   const nextVerNumber = `V${String(submission.current_version + 1).padStart(3, '0')}`;
   const cleanGrade = course.grade_level.replace('/', '-');
-  const autoRevExcelName = `ปพ5_${activeTerm.year}_${activeTerm.semester}_${cleanGrade}_${course.course_code}_${nextVerNumber}.xlsx`;
-  const autoRevPdfName = `ปพ5_${activeTerm.year}_${activeTerm.semester}_${cleanGrade}_${course.course_code}_${nextVerNumber}.pdf`;
+  const courseTerm = academicTerms.find((t) => t.id === course.term_id) || activeTerm;
+  const autoRevExcelName = `ปพ5_${courseTerm.year}_${courseTerm.semester}_${cleanGrade}_${course.course_code}_${nextVerNumber}.xlsx`;
+  const autoRevPdfName = `ปพ5_${courseTerm.year}_${courseTerm.semester}_${cleanGrade}_${course.course_code}_${nextVerNumber}.pdf`;
 
   const handleConfirmRevision = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -22,6 +22,7 @@ export const ExecutiveApproveView: React.FC = () => {
   const {
     schoolLogoUrl,
     selectedSubmissionId,
+    setSelectedSubmissionId,
     submissions,
     courses,
     users,
@@ -37,8 +38,7 @@ export const ExecutiveApproveView: React.FC = () => {
 
   const submission =
     submissions.find((s) => s.id === selectedSubmissionId) ||
-    submissions.find((s) => s.status === 'PENDING_DIRECTOR') ||
-    submissions[0];
+    submissions.find((s) => s.status === 'PENDING_DIRECTOR');
 
   const course = courses.find((c) => c.id === submission?.course_id);
   const teacher = users.find((u) => u.id === course?.teacher_id);
@@ -47,12 +47,24 @@ export const ExecutiveApproveView: React.FC = () => {
   if (!course || !submission) {
     return (
       <div className="p-8 text-center text-slate-500 text-xs">
-        ไม่พบข้อมูลเอกสาร กรุณากลับหน้าคิวงาน
+        <p>ยังไม่มีเอกสารที่ผ่านการตรวจและรอลงนามอนุมัติ</p>
+        <button
+          className="mt-3 text-blue-800 underline"
+          onClick={() => setActiveView('executive/dashboard')}
+        >
+          กลับหน้าคิวงาน
+        </button>
       </div>
     );
   }
+  const canSign =
+    submission.status === 'PENDING_DIRECTOR' &&
+    course.teacher_id !== currentUser.id &&
+    currentVer?.reviewed_by !== currentUser.id;
 
   const handleConfirmSignature = async (signatureData: string) => {
+    // Keep this document visible after approval removes it from the pending queue.
+    setSelectedSubmissionId(submission.id);
     if (!(await approveSubmission(submission.id, signatureData))) return;
     setSuccessNotice(
       'ลงนาม e-Signature และประทับตราสถานศึกษาสำเร็จ! เอกสารถูกล็อกเล่มถาวร (FINAL_LOCKED) พร้อมสร้าง Digital Certificate Hash',
@@ -167,7 +179,11 @@ export const ExecutiveApproveView: React.FC = () => {
             <span className="text-slate-400 block text-[11px]">ผลการตรวจ 4 ด้าน:</span>
             <span className="font-bold text-emerald-700 flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>ผ่าน 100% รับรองแล้ว</span>
+              <span>
+                {submission.status === 'PENDING_DIRECTOR' || submission.status === 'FINAL_LOCKED'
+                  ? 'ผ่านการตรวจรับรองแล้ว'
+                  : 'ยังไม่ผ่านการตรวจรับรองครบขั้นตอน'}
+              </span>
             </span>
           </div>
         </div>
@@ -188,13 +204,13 @@ export const ExecutiveApproveView: React.FC = () => {
       </div>
 
       {/* Signature & Seal Area */}
-      {submission.status !== 'FINAL_LOCKED' ? (
+      {canSign ? (
         <SignatureCanvas
           signerName={currentUser.full_name}
           signerPosition="ผู้อำนวยการโรงเรียนบ้านคูเมือง"
           onConfirm={handleConfirmSignature}
         />
-      ) : (
+      ) : submission.status === 'FINAL_LOCKED' ? (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6 text-center space-y-3">
           <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center mx-auto">
             <Lock className="w-6 h-6" />
@@ -216,6 +232,11 @@ export const ExecutiveApproveView: React.FC = () => {
             </button>
           </div>
         </div>
+      ) : (
+        <p role="status" className="p-4 bg-amber-50 text-amber-900 rounded-xl">
+          ยังลงนามรายการนี้ไม่ได้ ต้องผ่านการตรวจรับรองก่อน
+          และผู้ลงนามต้องไม่ใช่ผู้สอนหรือผู้ตรวจของรายวิชานี้
+        </p>
       )}
 
       {/* Certificate Modal */}
