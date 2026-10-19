@@ -263,6 +263,9 @@ export class Service {
                     .filter((f) => f.ready && f.used && !f.drive)
                     .map((f) => ({ id: f.id, name: f.name })),
                   stored: Object.values(s.files).filter((f) => f.used && f.drive).length,
+                  retained: Object.values(s.files)
+                    .filter((f) => f.ready && f.drive && !f.sourceReleased)
+                    .map((f) => ({ id: f.id, name: f.name, size: f.size })),
                   unorganized: Object.values(s.files)
                     .filter((f) => f.ready && f.used && f.drive && !f.drive.layout)
                     .map((f) => ({ id: f.id, name: f.name })),

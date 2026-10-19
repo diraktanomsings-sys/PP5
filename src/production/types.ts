@@ -139,6 +139,7 @@ export interface Snapshot {
     remaining?: Array<{ id: string; name: string }>;
     unorganized?: Array<{ id: string; name: string }>;
     stored?: number;
+    retained?: Array<{ id: string; name: string; size: number }>;
   };
 }
 export interface SchoolSettings {

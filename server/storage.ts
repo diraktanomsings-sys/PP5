@@ -1,4 +1,4 @@
-import { get, del } from '@vercel/blob';
+import { get, del, BlobNotFoundError } from '@vercel/blob';
 import { Readable } from 'node:stream';
 import type { Readable as NodeStream } from 'node:stream';
 import type { StoredFile } from './store.js';
@@ -25,7 +25,11 @@ export function blobStorage(): ObjectStorage {
   return {
     kind: 'blob',
     remove: async (file) => {
-      await del(file.pathname);
+      try {
+        await del(file.pathname);
+      } catch (error) {
+        if (!(error instanceof BlobNotFoundError)) throw error;
+      }
     },
     read,
     bytes: async (file) => {

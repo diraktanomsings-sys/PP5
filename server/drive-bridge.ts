@@ -350,6 +350,67 @@ export class DriveBridge {
     });
     // Keep the previous originals when migrating existing submitted documents.
   }
+  async cleanupSource(service: Service, token: string, role: any, body: any) {
+    service.actor(await this.store.read(), token, role, ['ADMIN']);
+    requireThat(body.confirmed === true, 400, 'กรุณายืนยันคืนพื้นที่สำเนาชั่วคราว');
+    const file = (await this.store.read()).files[body.id];
+    requireThat(file?.ready && file.drive, 409, 'ไฟล์นี้ยังไม่มีฉบับที่ยืนยันแล้วใน Drive');
+    await this.releaseSource(file, true, true);
+    requireThat(
+      (await this.store.read()).files[file.id]?.sourceReleased,
+      503,
+      'พื้นที่เดิมยังไม่รองรับคืนพื้นที่',
+    );
+    await this.store.write((s) =>
+      service.log(s, service.actor(s, token, role, ['ADMIN']), 'TEMPORARY_COPY_RELEASED', file.id, {
+        driveId: file.drive!.id,
+        sha256: file.sha256,
+      }),
+    );
+  }
+  private async releaseSource(file: StoredFile, verify = false, allowUsed = false) {
+    if (!file.drive || file.sourceReleased || (file.used && !allowUsed) || !this.source.remove)
+      return;
+    const lease = opaqueToken();
+    const saved = await this.store.write((s) => {
+      const current = s.files[file.id];
+      requireThat(
+        current?.ready && current.drive?.id === file.drive!.id && current.sha256 === file.sha256,
+        409,
+        'ข้อมูลไฟล์เปลี่ยนแปลง จึงยังไม่คืนพื้นที่',
+      );
+      if (current.sourceReleased) return undefined;
+      requireThat(
+        !Object.values(s.purges || {}).some((p) => p.fileIds.includes(file.id)) &&
+          (s.storageWrites?.[file.id]?.expiresAt || 0) <= Date.now(),
+        409,
+        'ไฟล์กำลังบันทึกหรือกำลังลบ',
+      );
+      s.storageWrites ||= {};
+      s.storageWrites[file.id] = { token: lease, expiresAt: Date.now() + 150000 };
+      return structuredClone(current);
+    });
+    if (!saved) return;
+    try {
+      // Old retained copies must be verified against the actual Drive bytes again.
+      // New uploads already passed the receiver's exact-byte check before ready=true.
+      if (verify) await this.bytes(saved);
+      await this.source.remove(saved);
+      await this.store.write((s) => {
+        requireThat(
+          s.files[file.id]?.drive?.id === saved.drive!.id &&
+            s.files[file.id]?.sha256 === saved.sha256,
+          409,
+          'ตำแหน่งไฟล์เปลี่ยนแปลง',
+        );
+        s.files[file.id].sourceReleased = true;
+      });
+    } finally {
+      await this.store.write((s) => {
+        if (s.storageWrites?.[file.id]?.token === lease) delete s.storageWrites[file.id];
+      });
+    }
+  }
   private layout(s: import('./store.js').State, file: StoredFile) {
     const c = s.courses.find((c) => c.id === file.courseId);
     const t = s.terms.find((t) => t.id === c?.termId);
@@ -433,13 +494,7 @@ export class DriveBridge {
       bytes: (f) => this.bytes(f),
       read: async (f) => (f.drive ? Readable.from([await this.bytes(f)]) : this.source.read(f)),
       persist: (f, b) => this.persist(f, b),
-      release: async (f) => {
-        if (!f.drive || f.used || f.sourceReleased || !this.source.remove) return;
-        await this.source.remove(f);
-        await this.store.write((s) => {
-          if (s.files[f.id]?.drive?.id === f.drive!.id) s.files[f.id].sourceReleased = true;
-        });
-      },
+      release: (f) => this.releaseSource(f),
     };
   }
 }

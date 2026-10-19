@@ -47,6 +47,15 @@ export function createHttp(
   drive?: DriveBridge,
 ) {
   const app = express();
+  async function releaseUploadCopy(fileId: string) {
+    const saved = (await service.store.read()).files[fileId];
+    if (!saved?.drive || !storage.release) return;
+    try {
+      await storage.release(saved);
+    } catch {
+      console.warn('PP5 temporary upload cleanup pending');
+    }
+  }
   app.disable('x-powered-by');
   app.use((_req, res, next) => {
     res.set({
@@ -269,6 +278,12 @@ export function createHttp(
         res.json({ ok: true });
         return;
       }
+      if (action === 'drive-cleanup') {
+        requireThat(drive, 404, 'ไม่รองรับการเชื่อม Drive ในโหมดนี้');
+        await drive.cleanupSource(service, token(req), role(req), req.body);
+        res.json({ ok: true });
+        return;
+      }
       if (action === 'drive-organize') {
         requireThat(drive, 404, 'ไม่รองรับการเชื่อม Drive ในโหมดนี้');
         await drive.organize(service, token(req), role(req), req.body.id);
@@ -320,7 +335,9 @@ export function createHttp(
         const file = await service.pendingFile(token(req), String(req.query.id));
         verifyFileBytes(file, req.body);
         await storage.write(file, req.body);
-        res.json(await service.readyFile(token(req), file.id, req.body, storage.persist));
+        const result = await service.readyFile(token(req), file.id, req.body, storage.persist);
+        await releaseUploadCopy(file.id);
+        res.json(result);
         return;
       }
       if (action === 'finalize') {
@@ -331,14 +348,7 @@ export function createHttp(
           await storage.bytes(file),
           storage.persist,
         );
-        const saved = (await service.store.read()).files[file.id];
-        if (saved.drive && storage.release) {
-          try {
-            await storage.release(saved);
-          } catch {
-            console.warn('PP5 temporary upload cleanup pending');
-          }
-        }
+        await releaseUploadCopy(file.id);
         res.json(result);
         return;
       }

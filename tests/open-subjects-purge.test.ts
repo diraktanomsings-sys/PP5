@@ -224,14 +224,13 @@ test('teacher withdraws only own unapproved submission, deletes every owned vers
     id: sub.id,
     planHash: p.planHash,
     confirmed: true,
-    confirmation: 'ลบถาวร',
   };
   await denied(
     () => purgeStep(f.service, f.storage, 'b', 'TEACHER', { ...body, planHash: 'stale' }),
     409,
   );
   await denied(
-    () => purgeStep(f.service, f.storage, 'b', 'TEACHER', { ...body, confirmation: '' }),
+    () => purgeStep(f.service, f.storage, 'b', 'TEACHER', { ...body, confirmed: false }),
     400,
   );
   f.setFailure(pair.pdfId);
