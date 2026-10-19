@@ -27,10 +27,7 @@ interface TopNavbarProps {
   onMobileOpenSidebar: () => void;
 }
 
-export const TopNavbar: React.FC<TopNavbarProps> = ({
-  onToggleSidebar,
-  onMobileOpenSidebar,
-}) => {
+export const TopNavbar: React.FC<TopNavbarProps> = ({ onToggleSidebar, onMobileOpenSidebar }) => {
   const {
     currentUser,
     currentRole,
@@ -60,7 +57,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
 
-  const handleChangePasswordSubmit = (e: React.FormEvent) => {
+  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError(null);
     setPasswordSuccess(null);
@@ -70,8 +67,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
       return;
     }
 
-    if (!newPassword || newPassword.length < 6) {
-      setPasswordError('รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 6 ตัวอักษร');
+    if (!newPassword || newPassword.length < 12) {
+      setPasswordError('รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 12 ตัวอักษร');
       return;
     }
 
@@ -80,9 +77,9 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
       return;
     }
 
-    const res = changePassword(currentUser.id, currentPassword, newPassword);
+    const res = await changePassword(currentUser.id, currentPassword, newPassword);
     if (!res.success) {
-      setPasswordError(res.error || 'ไม่สามารถเปลี่ยนรหัสผ่านได้');
+      setPasswordError('ไม่สามารถเปลี่ยนรหัสผ่านได้ กรุณาตรวจสอบข้อความแจ้งข้อผิดพลาด');
     } else {
       setPasswordSuccess('เปลี่ยนรหัสผ่านสำเร็จเรียบร้อยแล้ว!');
       setTimeout(() => {
@@ -179,8 +176,12 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                         }}
                         className="p-2.5 bg-rose-50 rounded-xl border border-rose-100 text-rose-800 cursor-pointer hover:bg-rose-100/60"
                       >
-                        <p className="font-semibold">มีเอกสารส่งกลับแก้ไข {rejectedCount} รายวิชา</p>
-                        <p className="text-[11px] text-rose-600 mt-0.5">วิชา ท13101 ภาษาไทย 3 ส่งกลับเพื่อแก้สูตร</p>
+                        <p className="font-semibold">
+                          มีเอกสารส่งกลับแก้ไข {rejectedCount} รายวิชา
+                        </p>
+                        <p className="text-[11px] text-rose-600 mt-0.5">
+                          วิชา ท13101 ภาษาไทย 3 ส่งกลับเพื่อแก้สูตร
+                        </p>
                       </div>
                     )}
                     {pendingReviewCount > 0 && (
@@ -197,8 +198,12 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                         }}
                         className="p-2.5 bg-blue-50 rounded-xl border border-blue-100 text-blue-800 cursor-pointer hover:bg-blue-100/60"
                       >
-                        <p className="font-semibold">มีงานรอตรวจในคิว {pendingReviewCount} รายวิชา</p>
-                        <p className="text-[11px] text-blue-600 mt-0.5">รอผู้ตรวจรับรองตามเกณฑ์ 4 ด้าน</p>
+                        <p className="font-semibold">
+                          มีงานรอตรวจในคิว {pendingReviewCount} รายวิชา
+                        </p>
+                        <p className="text-[11px] text-blue-600 mt-0.5">
+                          รอผู้ตรวจรับรองตามเกณฑ์ 4 ด้าน
+                        </p>
                       </div>
                     )}
                     {pendingDirectorCount > 0 && (
@@ -215,8 +220,12 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                         }}
                         className="p-2.5 bg-amber-50 rounded-xl border border-amber-100 text-amber-800 cursor-pointer hover:bg-amber-100/60"
                       >
-                        <p className="font-semibold">มีเอกสารรอ ผอ. ลงนาม {pendingDirectorCount} รายวิชา</p>
-                        <p className="text-[11px] text-amber-600 mt-0.5">พร้อมสำหรับ Quick Batch Sign</p>
+                        <p className="font-semibold">
+                          มีเอกสารรอ ผอ. ลงนาม {pendingDirectorCount} รายวิชา
+                        </p>
+                        <p className="text-[11px] text-amber-600 mt-0.5">
+                          พร้อมสำหรับ Quick Batch Sign
+                        </p>
                       </div>
                     )}
                   </div>
@@ -351,7 +360,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               </div>
 
               <p className="text-[11px] text-slate-500">
-                หากพบปัญหาทางเทคนิค สามารถติดต่อกลุ่มงานสารสนเทศ เบอร์โทรศัพท์ภายใน 104
+                หากพบปัญหาทางเทคนิค กรุณาติดต่อผู้ดูแล PP5 ของโรงเรียน
               </p>
             </div>
 
@@ -387,7 +396,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
             <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs space-y-1">
               <div className="font-bold text-blue-900">{currentUser.full_name}</div>
               <div className="text-slate-600 text-[11px]">
-                รหัสประจำตัว: <span className="font-mono">{currentUser.teacher_id}</span> · {currentUser.department}
+                รหัสประจำตัว: <span className="font-mono">{currentUser.teacher_id}</span> ·{' '}
+                {currentUser.department}
               </div>
             </div>
 
@@ -407,9 +417,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
 
             <form onSubmit={handleChangePasswordSubmit} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  รหัสผ่านปัจจุบัน *
-                </label>
+                <label className="block font-bold text-slate-700 mb-1">รหัสผ่านปัจจุบัน *</label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                   <input
@@ -432,7 +440,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  รหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร) *
+                  รหัสผ่านใหม่ (อย่างน้อย 12 ตัวอักษร) *
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -487,10 +495,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
       )}
 
       {/* Admin School Logo Modal */}
-      <AdminSchoolLogoModal
-        isOpen={showLogoModal}
-        onClose={() => setShowLogoModal(false)}
-      />
+      <AdminSchoolLogoModal isOpen={showLogoModal} onClose={() => setShowLogoModal(false)} />
     </>
   );
 };

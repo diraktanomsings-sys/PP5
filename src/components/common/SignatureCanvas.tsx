@@ -29,14 +29,15 @@ export const SignatureCanvas: React.FC<SignatureCanvasProps> = ({
     ctx.lineJoin = 'round';
   }, []);
 
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  const startDrawing = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>,
+  ) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     setIsDrawing(true);
-    setHasDrawn(true);
     setUseDefaultSignature(false);
 
     const rect = canvas.getBoundingClientRect();
@@ -44,7 +45,7 @@ export const SignatureCanvas: React.FC<SignatureCanvasProps> = ({
     const y = 'touches' in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
 
     ctx.beginPath();
-    ctx.moveTo(x, y);
+    ctx.moveTo((x * canvas.width) / rect.width, (y * canvas.height) / rect.height);
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -58,8 +59,9 @@ export const SignatureCanvas: React.FC<SignatureCanvasProps> = ({
     const x = 'touches' in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
     const y = 'touches' in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
 
-    ctx.lineTo(x, y);
+    ctx.lineTo((x * canvas.width) / rect.width, (y * canvas.height) / rect.height);
     ctx.stroke();
+    setHasDrawn(true);
   };
 
   const stopDrawing = () => {
@@ -76,34 +78,12 @@ export const SignatureCanvas: React.FC<SignatureCanvasProps> = ({
     setUseDefaultSignature(false);
   };
 
-  const handleUsePresetSignature = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // Draw an elegant simulated Thai signature
-    ctx.strokeStyle = '#00236f';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(40, 70);
-    ctx.bezierCurveTo(70, 20, 110, 100, 150, 45);
-    ctx.bezierCurveTo(180, 20, 210, 80, 240, 50);
-    ctx.bezierCurveTo(270, 30, 310, 90, 340, 60);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(80, 75);
-    ctx.lineTo(330, 75);
-    ctx.stroke();
-
-    setHasDrawn(true);
-    setUseDefaultSignature(true);
-  };
+  const handleUsePresetSignature = () => {};
 
   const handleConfirmSignature = () => {
     const canvas = canvasRef.current;
-    const dataUrl = canvas ? canvas.toDataURL() : 'preset-signature-verified';
+    if (!canvas || !hasDrawn) return;
+    const dataUrl = canvas.toDataURL('image/png');
     onConfirm(dataUrl);
   };
 
@@ -112,18 +92,9 @@ export const SignatureCanvas: React.FC<SignatureCanvasProps> = ({
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <PenTool className="w-4 h-4 text-blue-700" />
-          <h4 className="text-sm font-bold text-slate-800">
-            ระบบลงนามดิจิทัล (e-Signature & Digital Certificate)
-          </h4>
+          <h4 className="text-sm font-bold text-slate-800">ลงนามอนุมัติเอกสาร</h4>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleUsePresetSignature}
-            className="text-xs text-blue-700 hover:text-blue-900 font-medium px-2 py-1 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors"
-          >
-            ใช้ลายเซ็นที่ลงทะเบียนไว้
-          </button>
           <button
             type="button"
             onClick={clearCanvas}
@@ -159,7 +130,7 @@ export const SignatureCanvas: React.FC<SignatureCanvasProps> = ({
         {/* Official seal preview badge */}
         <div className="absolute bottom-2 right-2 flex items-center gap-1.5 bg-rose-50/90 border border-rose-200 px-2 py-1 rounded text-[11px] text-rose-800 pointer-events-none">
           <Stamp className="w-3.5 h-3.5 text-rose-600" />
-          <span>ประทับตราสถานศึกษา</span>
+          <span>บันทึกลายมือชื่อพร้อมเวอร์ชันเอกสาร</span>
         </div>
       </div>
 
