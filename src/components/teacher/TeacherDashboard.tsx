@@ -1,4 +1,5 @@
 import React from 'react';
+import { TeacherDeleteSubmission } from './TeacherDeleteSubmission';
 import { useApp } from '../../context/AppContext';
 import { StatusBadge } from '../common/StatusBadge';
 import {
@@ -280,16 +281,23 @@ export const TeacherDashboard: React.FC = () => {
                   <td className="px-4 py-3.5 text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       {submission ? (
-                        <button
-                          onClick={() => {
-                            setSelectedSubmissionId(submission.id);
-                            setActiveView('teacher/detail');
-                          }}
-                          className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-semibold flex items-center gap-1 transition-colors"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>ดูรายละเอียด</span>
-                        </button>
+                        <>
+                          <button
+                            onClick={() => {
+                              setSelectedSubmissionId(submission.id);
+                              setActiveView('teacher/detail');
+                            }}
+                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-semibold flex items-center gap-1 transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>ดูรายละเอียด</span>
+                          </button>
+                          <TeacherDeleteSubmission
+                            id={submission.id}
+                            label={`${course.course_code} ${course.grade_level}`}
+                            status={submission.status}
+                          />
+                        </>
                       ) : (
                         <button
                           onClick={() => setActiveView('teacher/submit')}

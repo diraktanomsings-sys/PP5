@@ -19,6 +19,17 @@ const fail = (f: () => Promise<unknown>, status: number) =>
   assert.rejects(f, (e: unknown) => e instanceof ApiError && e.status === status);
 function fixture() {
   let state = emptyState();
+  state.terms.push({ id: 'term', year: 2569, semester: 1, active: true, deadline: '2027-01-01' });
+  state.courses.push({
+    id: 'course',
+    termId: 'term',
+    code: 'ท13101',
+    name: 'ภาษาไทย',
+    grade: 'ป.3/1',
+    teacherId: 'teacher',
+    reviewerId: '',
+    open: true,
+  });
   state.users.push({
     id: 'admin',
     teacherId: 'admin',
@@ -75,32 +86,57 @@ function fixture() {
     getBytes: () => Buffer.from(typeof data === 'string' ? data : data),
     name,
   });
-  const root = {
-    getId: () => folderId,
-    getName: () => 'ปพ.5',
-    getSharingAccess: () => (shared ? 'ANYONE' : 'PRIVATE'),
-    getFilesByName: (name: string) =>
-      iterator([...files.values()].filter((f) => f.name === name && !f.trashed)),
-    createFile: (b: any) => {
-      const id = randomUUID();
-      const f = {
-        id,
-        name: b.name,
-        data: Buffer.from(b.getBytes()),
-        trashed: false,
-        getId: () => id,
-        getSize: () => f.data.length,
-        getBlob: () => blob(f.data),
-        getParents: () => iterator([root]),
-        isTrashed: () => f.trashed,
-        setTrashed: (v: boolean) => {
-          f.trashed = v;
-        },
-      };
-      files.set(id, f);
-      return f;
-    },
-  };
+  const folders = new Map<string, any>();
+  function makeFolder(id: string, name: string, parent?: any): any {
+    const folder = {
+      id,
+      name,
+      parent,
+      getId: () => id,
+      getName: () => name,
+      isTrashed: () => false,
+      getParents: () => iterator(folder.parent ? [folder.parent] : []),
+      shared: false,
+      getSharingAccess: () => (shared || folder.shared ? 'ANYONE' : 'PRIVATE'),
+      getFoldersByName: (name: string) =>
+        iterator([...folders.values()].filter((f) => f.name === name && f.parent === folder)),
+      createFolder: (name: string) => makeFolder(randomUUID(), name, folder),
+      getFiles: () =>
+        iterator([...files.values()].filter((f) => f.parent === folder && !f.trashed)),
+      getFilesByName: (name: string) =>
+        iterator(
+          [...files.values()].filter((f) => f.name === name && !f.trashed && f.parent === folder),
+        ),
+      createFile: (b: any) => {
+        const id = randomUUID();
+        const f = {
+          id,
+          name: b.name,
+          data: Buffer.from(b.getBytes()),
+          trashed: false,
+          outside: false,
+          parent: folder,
+          getId: () => id,
+          getName: () => f.name,
+          getSize: () => f.data.length,
+          getBlob: () => blob(f.data),
+          getParents: () => iterator(f.outside ? [] : [f.parent]),
+          moveTo: (destination: any) => {
+            f.parent = destination;
+          },
+          isTrashed: () => f.trashed,
+          setTrashed: (v: boolean) => {
+            f.trashed = v;
+          },
+        };
+        files.set(id, f);
+        return f;
+      },
+    };
+    folders.set(id, folder);
+    return folder;
+  }
+  const root = makeFolder(folderId, 'ปพ.5');
   let payload: any;
   const context = vm.createContext({
     ContentService: {
@@ -115,9 +151,11 @@ function fixture() {
     DriveApp: {
       Access: { PRIVATE: 'PRIVATE' },
       getFolderById: (id: string) => {
-        assert.equal(id, folderId);
-        return root;
+        if (!folders.has(id)) throw Error('Missing folder');
+        return folders.get(id);
       },
+      getFilesByName: (name: string) =>
+        iterator([...files.values()].filter((f) => f.name === name && !f.trashed)),
       getFileById: (id: string) => files.get(id),
     },
     UrlFetchApp: {
@@ -140,7 +178,7 @@ function fixture() {
                 id,
                 name: file.name,
                 size: String(file.data.length),
-                parents: [file.outside ? 'another-folder' : folderId],
+                parents: [file.outside ? 'another-folder' : file.parent.id],
                 mimeType: file.folder ? 'application/vnd.google-apps.folder' : 'application/pdf',
               }),
           };
@@ -196,6 +234,8 @@ function fixture() {
     service,
     file,
     files,
+    folders,
+    root,
     source,
     connect,
     context,
@@ -310,6 +350,72 @@ test('write, retry and read use identical bytes in the school root; migration re
   assert.equal(second?.id, saved.drive.id);
   assert.equal([...f.files.values()].filter((x) => !x.trashed).length, 1);
   await fail(() => f.bridge.migrate(f.service, 'teacher', 'TEACHER', f.file.id), 403);
+});
+test('school receiver separates term/class/subject, reuses folders and organizes legacy files without changing IDs or bytes', async () => {
+  const f = fixture();
+  await f.connect();
+  await f.bridge.migrate(f.service, 'admin', 'ADMIN', f.file.id);
+  const saved = (await f.store.read()).files[f.file.id];
+  const remote = f.files.get(saved.drive!.id);
+  assert.deepEqual(saved.drive!.layout, [
+    'ปีการศึกษา 2569 ภาคเรียนที่ 1',
+    'ชั้น ป.3-1',
+    'ท13101 ภาษาไทย',
+  ]);
+  assert.equal(remote.parent.name, 'ท13101 ภาษาไทย');
+  assert.equal(remote.parent.parent.name, 'ชั้น ป.3-1');
+  assert.equal(remote.parent.parent.parent.parent.id, folderId);
+  assert.equal(f.folders.size, 4);
+  const second = { ...f.file, id: randomUUID(), name: 'version-2.pdf', drive: undefined };
+  await f.store.write((s) => {
+    s.files[second.id] = second;
+  });
+  const secondPointer = await f.bridge.persist(second, bytes);
+  assert.equal(secondPointer!.parentId, saved.drive!.parentId);
+  assert.equal(f.folders.size, 4);
+  remote.moveTo(f.root);
+  await f.store.write((s) => {
+    delete s.files[f.file.id].drive!.layout;
+    delete s.files[f.file.id].drive!.parentId;
+  });
+  assert.equal((await f.service.snapshot('admin', 'ADMIN')).drive!.unorganized!.length, 1);
+  assert.equal((await f.service.snapshot('teacher', 'TEACHER')).drive!.unorganized, undefined);
+  await fail(() => f.bridge.organize(f.service, 'teacher', 'TEACHER', f.file.id), 403);
+  remote.data = Buffer.from('changed');
+  await fail(() => f.bridge.organize(f.service, 'admin', 'ADMIN', f.file.id), 409);
+  assert.equal(remote.parent, f.root);
+  remote.data = bytes;
+  await f.bridge.organize(f.service, 'admin', 'ADMIN', f.file.id);
+  await f.bridge.organize(f.service, 'admin', 'ADMIN', f.file.id);
+  assert.equal(remote.parent.id, saved.drive!.parentId);
+  assert.equal((await f.store.read()).files[f.file.id].drive!.id, saved.drive!.id);
+  assert.equal(
+    digest(await f.bridge.bytes((await f.store.read()).files[f.file.id])),
+    digest(bytes),
+  );
+  assert.equal(f.folders.size, 4);
+  assert.equal(f.removed, 0);
+  remote.parent.shared = true;
+  await fail(() => f.bridge.bytes(saved), 409);
+});
+test('owner maintenance moves only unambiguous managed root filenames and preserves all bytes and IDs', () => {
+  const f = fixture();
+  const add = (tail: string) =>
+    f.root.createFile({ name: `PP5_${randomUUID()}__${tail}`, getBytes: () => bytes });
+  const original = add('ปพ5_2569_ภาคเรียนที่1_ป.3-1_ท13101_ภาษาไทย_ครู.pdf');
+  const revision = add('ปพ5_2569_1_ป.3-1_ท13101_V002.xlsx');
+  const unknown = add('ปพ5_2569_1_ป.4-1_ว12010_V002.pdf');
+  const ambiguousA = add('ปพ5_2569_1_ป.2-1_ส101_สังคม_ครู.pdf');
+  const ambiguousB = add('ปพ5_2569_1_ป.2-1_ส101_ประวัติศาสตร์_ครู.pdf');
+  assert.equal(f.context.legacyOrganizationPlan_().rows.length, 2);
+  f.context.organizeLegacyRootFiles();
+  assert.equal(original.parent.name, 'ท13101 ภาษาไทย');
+  assert.equal(original.parent, revision.parent);
+  for (const file of [unknown, ambiguousA, ambiguousB]) assert.equal(file.parent, f.root);
+  assert.equal(f.context.legacyOrganizationPlan_().rows.length, 0);
+  assert.equal(digest(original.data), digest(bytes));
+  assert.ok(f.files.has(original.id));
+  assert.equal(f.permanentlyDeleted, 0);
 });
 test('pending upload source is released only after its verified Drive pointer is saved', async () => {
   const f = fixture();

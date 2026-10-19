@@ -21,7 +21,14 @@ export interface StoredFile extends FileRecord {
   expiresAt: number;
   purpose?: 'annotation';
   metrics?: import('../src/production/types.js').Version['metrics'];
-  drive?: { id: string; folderId: string; webViewLink: string; copiedAt: string };
+  drive?: {
+    id: string;
+    folderId: string;
+    webViewLink: string;
+    copiedAt: string;
+    parentId?: string;
+    layout?: string[];
+  };
   sourceReleased?: boolean;
 }
 export interface Session {

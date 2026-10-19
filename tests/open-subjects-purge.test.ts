@@ -189,6 +189,102 @@ test('teachers select any open unsubmitted subject across departments; first com
   await f.service.submit('b', 'TEACHER', { courseId: 'second', ...second, confirmed: true });
   assert.equal((await f.service.snapshot('b', 'TEACHER')).submissions.length, 2);
 });
+test('teacher withdraws only own unapproved submission, deletes every owned version/annotation and keeps the course selectable', async () => {
+  const f = fixture();
+  const foreignDraft = await f.pair('a');
+  const pair = await f.pair('b');
+  await f.service.submit('b', 'TEACHER', { courseId: 'course', ...pair, confirmed: true });
+  let sub = (await f.store.read()).submissions[0];
+  await denied(() => previewPurge(f.service, 'a', 'TEACHER', 'submission', sub.id), 403);
+  await denied(() => previewPurge(f.service, 'admin', 'ADMIN', 'submission', sub.id), 403);
+  await f.service.configure('admin', 'ADMIN', 'reviewers', {
+    assignments: [{ courseId: 'course', reviewerId: 'reviewer' }],
+  });
+  const annotatedId = await f.upload('reviewer', 'course', 'pdf', 'annotation');
+  await f.service.review('reviewer', 'REVIEWER', {
+    id: sub.id,
+    expectedRevision: sub.revision,
+    pass: false,
+    checks: [false, false, false, false],
+    notes: 'Synthetic return',
+    annotatedId,
+  });
+  const revisionFiles = await f.pair('b');
+  await f.service.submit('b', 'TEACHER', {
+    courseId: 'course',
+    ...revisionFiles,
+    confirmed: true,
+    expectedRevision: (await f.store.read()).submissions[0].revision,
+  });
+  const p = await previewPurge(f.service, 'b', 'TEACHER', 'submission', sub.id);
+  assert.equal(p.fileCount, 5);
+  assert.equal(p.versionCount, 2);
+  const body = {
+    kind: 'submission',
+    id: sub.id,
+    planHash: p.planHash,
+    confirmed: true,
+    confirmation: 'ลบถาวร',
+  };
+  await denied(
+    () => purgeStep(f.service, f.storage, 'b', 'TEACHER', { ...body, planHash: 'stale' }),
+    409,
+  );
+  await denied(
+    () => purgeStep(f.service, f.storage, 'b', 'TEACHER', { ...body, confirmation: '' }),
+    400,
+  );
+  f.setFailure(pair.pdfId);
+  let result = { done: false };
+  let hadFailure = false;
+  for (let i = 0; i < 8 && !result.done; i++) {
+    try {
+      result = await purgeStep(f.service, f.storage, 'b', 'TEACHER', body);
+    } catch (e) {
+      assert.match(String(e), /Synthetic storage interruption/);
+      hadFailure = true;
+    }
+    if (!result.done) {
+      await denied(
+        () =>
+          f.service.reserve('b', 'TEACHER', {
+            courseId: 'course',
+            kind: 'pdf',
+            name: 'new.pdf',
+            size: pdf.length,
+          }),
+        409,
+      );
+      await denied(() => f.service.review('reviewer', 'REVIEWER', { id: sub.id }), 409);
+      await denied(() => f.configure('course-delete', 'course'), 409);
+      assert.equal((await f.store.read()).submissions.length, 1);
+    }
+  }
+  assert.ok(hadFailure);
+  assert.equal(result.done, true);
+  const state = await f.store.read();
+  assert.equal(state.submissions.length, 0);
+  assert.equal(state.courses.find((c) => c.id === 'course')!.teacherId, '');
+  assert.ok(f.buffers.has(foreignDraft.pdfId));
+  for (const id of [
+    pair.excelId,
+    pair.pdfId,
+    annotatedId,
+    revisionFiles.excelId,
+    revisionFiles.pdfId,
+  ])
+    assert.equal(f.buffers.has(id), false);
+  await f.service.submit('a', 'TEACHER', { courseId: 'course', ...foreignDraft, confirmed: true });
+  sub = (await f.store.read()).submissions[0];
+  await f.service.review('reviewer', 'REVIEWER', {
+    id: sub.id,
+    expectedRevision: sub.revision,
+    pass: true,
+    checks: [true, true, true, true],
+    notes: 'Synthetic pass',
+  });
+  await denied(() => previewPurge(f.service, 'a', 'TEACHER', 'submission', sub.id), 409);
+});
 test('assigned reviewer returns a real annotated PDF; only the actual sender can retrieve it and its history survives revision', async () => {
   const f = fixture();
   const files = await f.pair('b');

@@ -15,16 +15,143 @@ function hash_(bytes) {
     })
     .join('');
 }
-function inside_(file, rootId) {
+function inside_(file, rootId, depth) {
+  depth = depth || 0;
+  if (depth > 3) return false;
   var parents = file.getParents();
-  while (parents.hasNext()) if (parents.next().getId() === rootId) return true;
+  while (parents.hasNext()) {
+    var parent = parents.next();
+    if (parent.getId() === rootId) return true;
+    if (
+      !parent.isTrashed() &&
+      parent.getSharingAccess() === DriveApp.Access.PRIVATE &&
+      inside_(parent, rootId, depth + 1)
+    )
+      return true;
+  }
   return false;
+}
+function managedName_(f) {
+  return 'PP5_' + f.id + '__' + f.name.replace(/[\\/\x00-\x1f]/g, '_');
+}
+function destination_(root, layout) {
+  if (!layout) return root; // Backward compatibility while PP5 deployment is updated.
+  if (!Array.isArray(layout) || layout.length !== 3) throw new Error('ACCESS');
+  var folder = root;
+  layout.forEach(function (name) {
+    if (
+      typeof name !== 'string' ||
+      !name.trim() ||
+      name.length > 140 ||
+      /[\\/\x00-\x1f]/.test(name)
+    )
+      throw new Error('ACCESS');
+    var folders = folder.getFoldersByName(name);
+    folder = folders.hasNext() ? folders.next() : folder.createFolder(name);
+    if (folder.isTrashed() || folder.getSharingAccess() !== DriveApp.Access.PRIVATE)
+      throw new Error('PRIVATE_FOLDER');
+  });
+  return folder;
+}
+function metadataInside_(parents) {
+  if (!Array.isArray(parents)) return false;
+  return parents.some(function (id) {
+    if (id === PP5_FOLDER_ID) return true;
+    try {
+      var folder = DriveApp.getFolderById(id);
+      return (
+        !folder.isTrashed() &&
+        folder.getSharingAccess() === DriveApp.Access.PRIVATE &&
+        inside_(folder, PP5_FOLDER_ID)
+      );
+    } catch (_) {
+      return false;
+    }
+  });
+}
+// Owner-only maintenance in the Apps Script editor; never exposed by doPost.
+// Only unambiguous PP5-generated filenames directly inside the bound root qualify.
+function legacyOrganizationPlan_() {
+  var root = DriveApp.getFolderById(PP5_FOLDER_ID);
+  if (root.getSharingAccess() !== DriveApp.Access.PRIVATE) throw new Error('PRIVATE_FOLDER');
+  var files = root.getFiles(),
+    rows = [],
+    names = {};
+  while (files.hasNext()) {
+    var file = files.next(),
+      name = file.getName();
+    var match =
+      /^PP5_[a-f0-9-]{36}__ปพ5_(25\d{2})_(?:ภาคเรียนที่)?([12])_([ปม]\.\d-\d+)_([^_]+)_([^_]+)/.exec(
+        name,
+      );
+    if (!match || file.isTrashed()) continue;
+    var key = match.slice(1, 5).join('|');
+    var subject = match[5].replace(/\.(pdf|xlsx)$/i, '');
+    if (!/^V\d+$/i.test(subject)) {
+      if (names[key] === undefined) names[key] = subject;
+      else if (names[key] !== subject) names[key] = null;
+    }
+    rows.push({
+      file: file,
+      key: key,
+      year: match[1],
+      semester: match[2],
+      grade: match[3],
+      code: match[4],
+    });
+  }
+  return {
+    root: root,
+    rows: rows
+      .filter(function (row) {
+        return !!names[row.key];
+      })
+      .map(function (row) {
+        row.layout = [
+          'ปีการศึกษา ' + row.year + ' ภาคเรียนที่ ' + row.semester,
+          'ชั้น ' + row.grade,
+          (row.code + ' ' + names[row.key]).replace(/[\\/\x00-\x1f]/g, '-').slice(0, 140),
+        ];
+        return row;
+      }),
+  };
+}
+function previewLegacyOrganization() {
+  var plan = legacyOrganizationPlan_();
+  console.log(
+    JSON.stringify({
+      files: plan.rows.length,
+      folders: Array.from(
+        new Set(
+          plan.rows.map(function (row) {
+            return row.layout.join(' → ');
+          }),
+        ),
+      ),
+    }),
+  );
+}
+function organizeLegacyRootFiles() {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    var plan = legacyOrganizationPlan_(),
+      moved = 0;
+    plan.rows.forEach(function (row) {
+      if (!inside_(row.file, PP5_FOLDER_ID, 3) || row.file.isTrashed()) throw new Error('CHANGED');
+      row.file.moveTo(destination_(plan.root, row.layout));
+      moved++;
+    });
+    console.log(JSON.stringify({ moved: moved, preservedFileIds: true, deleted: 0 }));
+  } finally {
+    lock.releaseLock();
+  }
 }
 function doGet() {
   return result_({
     protocol: 'PP5-DRIVE-1',
     service: 'School PP5 receiver',
-    capabilities: ['permanent-delete-v1'],
+    capabilities: ['permanent-delete-v1', 'organized-folders-v1'],
   });
 }
 // Owner-run readiness check: reads folder capabilities only; never deletes a file.
@@ -67,7 +194,7 @@ function deleteManagedFile_(driveId, f) {
   var expectedName = 'PP5_' + f.id + '__' + f.name.replace(/[\\/\x00-\x1f]/g, '_');
   if (
     !metadata.parents ||
-    metadata.parents.indexOf(PP5_FOLDER_ID) < 0 ||
+    !metadataInside_(metadata.parents) ||
     metadata.name !== expectedName ||
     Number(metadata.size) !== f.size ||
     metadata.mimeType === 'application/vnd.google-apps.folder'
@@ -131,10 +258,13 @@ function doPost(e) {
       if (f.driveId) deleteManagedFile_(f.driveId, f);
       else {
         // Also remove a verified upload whose response was lost before its pointer was saved.
-        var named = root.getFilesByName(
+        var named = DriveApp.getFilesByName(
           'PP5_' + f.id + '__' + f.name.replace(/[\\/\x00-\x1f]/g, '_'),
         );
-        while (named.hasNext()) deleteManagedFile_(named.next().getId(), f);
+        while (named.hasNext()) {
+          var candidate = named.next();
+          if (inside_(candidate, PP5_FOLDER_ID)) deleteManagedFile_(candidate.getId(), f);
+        }
       }
       common.deleted = true;
       common.fileId = f.id;
@@ -153,27 +283,49 @@ function doPost(e) {
       )
         throw new Error('ACCESS');
       var file;
-      if (job.kind === 'write') {
-        var bytes = Utilities.base64Decode(job.base64 || '');
-        if (bytes.length !== f.size || hash_(bytes) !== f.sha256) throw new Error('CHANGED');
-        var name = 'PP5_' + f.id + '__' + f.name.replace(/[\\/\x00-\x1f]/g, '_');
+      if (job.kind === 'write' || job.kind === 'organize') {
+        var bytes;
+        if (job.kind === 'write') {
+          bytes = Utilities.base64Decode(job.base64 || '');
+          if (bytes.length !== f.size || hash_(bytes) !== f.sha256) throw new Error('CHANGED');
+        }
+        var name = managedName_(f);
         var lock = LockService.getScriptLock();
         lock.waitLock(15000);
         try {
-          var existing = root.getFilesByName(name);
-          file = existing.hasNext()
-            ? existing.next()
-            : root.createFile(
-                Utilities.newBlob(
-                  bytes,
-                  f.kind === 'pdf'
-                    ? 'application/pdf'
-                    : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                  name,
-                ),
-              );
+          if (job.kind === 'organize') {
+            if (!/^[A-Za-z0-9_-]{1,200}$/.test(f.driveId) || !f.layout) throw new Error('ACCESS');
+            file = DriveApp.getFileById(f.driveId);
+            if (!inside_(file, PP5_FOLDER_ID) || file.isTrashed() || file.getName() !== name)
+              throw new Error('ACCESS');
+          } else {
+            var existing = DriveApp.getFilesByName(name);
+            while (existing.hasNext()) {
+              var candidate = existing.next();
+              if (inside_(candidate, PP5_FOLDER_ID)) {
+                file = candidate;
+                break;
+              }
+            }
+          }
+          if (file && (file.getSize() !== f.size || hash_(file.getBlob().getBytes()) !== f.sha256))
+            throw new Error('CHANGED');
+          var target = destination_(root, f.layout);
+          if (!file)
+            file = target.createFile(
+              Utilities.newBlob(
+                bytes,
+                f.kind === 'pdf'
+                  ? 'application/pdf'
+                  : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                name,
+              ),
+            );
           if (file.getSize() !== f.size || hash_(file.getBlob().getBytes()) !== f.sha256)
             throw new Error('CHANGED');
+          if (!inside_(file, target.getId(), 3)) file.moveTo(target);
+          common.parentId = target.getId();
+          common.organized = !!f.layout;
         } finally {
           lock.releaseLock();
         }

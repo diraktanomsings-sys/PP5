@@ -1,6 +1,6 @@
 export type Role = 'TEACHER' | 'REVIEWER' | 'EXECUTIVE' | 'ADMIN';
 export interface PurgePreview {
-  kind: 'user' | 'course' | 'term';
+  kind: 'user' | 'course' | 'term' | 'submission';
   id: string;
   label: string;
   planHash: string;
@@ -137,6 +137,7 @@ export interface Snapshot {
     ownerEmail?: string;
     url?: string;
     remaining?: Array<{ id: string; name: string }>;
+    unorganized?: Array<{ id: string; name: string }>;
     stored?: number;
   };
 }
