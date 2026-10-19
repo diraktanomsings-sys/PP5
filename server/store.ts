@@ -6,6 +6,7 @@ import type {
   Submission,
   Audit,
   FileRecord,
+  SchoolSettings,
 } from '../src/production/types.js';
 
 export interface StoredUser extends Person {
@@ -18,6 +19,8 @@ export interface StoredFile extends FileRecord {
   ready: boolean;
   used: boolean;
   expiresAt: number;
+  purpose?: 'annotation';
+  metrics?: import('../src/production/types.js').Version['metrics'];
 }
 export interface Session {
   userId: string;
@@ -32,6 +35,7 @@ export interface State {
   sessions: Record<string, Session>;
   files: Record<string, StoredFile>;
   attempts: Record<string, { count: number; until: number }>;
+  settings?: SchoolSettings;
 }
 export const emptyState = (): State => ({
   users: [],

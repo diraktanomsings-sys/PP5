@@ -19,6 +19,7 @@ import {
 export const ReviewerDashboard: React.FC = () => {
   const {
     currentUser,
+    activeView,
     assignments,
     courses,
     submissions,
@@ -36,7 +37,7 @@ export const ReviewerDashboard: React.FC = () => {
 
   // Find assignments for this reviewer
   const myAssignedCourseIds = assignments
-    .filter((a) => a.reviewer_id === currentUser.id)
+    .filter((a) => a.reviewer_id === currentUser.id && a.term_id === activeTerm.id)
     .map((a) => a.course_id);
 
   // Map courses with their submission and teacher info
@@ -49,7 +50,9 @@ export const ReviewerDashboard: React.FC = () => {
     });
 
   // Filter items
-  const filteredItems = assignedItems.filter(({ course, teacher }) => {
+  const filteredItems = assignedItems.filter(({ course, teacher, submission }) => {
+    if (activeView === 'reviewer/revisions' && submission?.status !== 'REJECTED_REVISION')
+      return false;
     if (selectedDept !== 'ALL' && course.department !== selectedDept) return false;
     if (selectedGrade !== 'ALL' && !course.grade_level.startsWith(selectedGrade)) return false;
     if (searchQuery) {
@@ -64,17 +67,17 @@ export const ReviewerDashboard: React.FC = () => {
 
   // Queues
   const pendingQueue = filteredItems.filter(
-    (i) => i.submission && i.submission.status === 'PENDING_REVIEW'
+    (i) => i.submission && i.submission.status === 'PENDING_REVIEW',
   );
   const rejectedQueue = filteredItems.filter(
-    (i) => i.submission && i.submission.status === 'REJECTED_REVISION'
+    (i) => i.submission && i.submission.status === 'REJECTED_REVISION',
   );
   const completedQueue = filteredItems.filter(
     (i) =>
       i.submission &&
       (i.submission.status === 'PASSED_REVIEW' ||
         i.submission.status === 'PENDING_DIRECTOR' ||
-        i.submission.status === 'FINAL_LOCKED')
+        i.submission.status === 'FINAL_LOCKED'),
   );
 
   return (
@@ -93,12 +96,12 @@ export const ReviewerDashboard: React.FC = () => {
             คิวงานตรวจสอบ ปพ.5 — {currentUser.full_name}
           </h2>
           <p className="text-xs sm:text-sm text-purple-100 mt-1">
-            ตรวจสอบความถูกต้องตามเกณฑ์หลักสูตร 4 ด้าน (คะแนนเก็บและปลายภาค, เวลาเรียน 80%, คุณลักษณะ 8 ข้อ, การอ่าน คิดวิเคราะห์)
+            ตรวจสอบความถูกต้องตามเกณฑ์หลักสูตร 4 ด้าน (คะแนนเก็บและปลายภาค, เวลาเรียน 80%, คุณลักษณะ
+            8 ข้อ, การอ่าน คิดวิเคราะห์)
           </p>
         </div>
 
         <div className="flex flex-col sm:flex-row md:flex-col gap-2.5 shrink-0">
-
           <div className="bg-white/10 backdrop-blur-xs px-4 py-2.5 rounded-xl border border-white/20 text-xs text-white">
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-300" />
@@ -120,30 +123,46 @@ export const ReviewerDashboard: React.FC = () => {
               <Clock className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-bold text-blue-700 font-mono mt-2">{pendingQueue.length}</div>
-          <div className="text-[11px] text-blue-600 mt-1 font-medium">เล่มที่ส่งมาใหม่ รอรับการตรวจสอบ</div>
+          <div className="text-2xl font-bold text-blue-700 font-mono mt-2">
+            {pendingQueue.length}
+          </div>
+          <div className="text-[11px] text-blue-600 mt-1 font-medium">
+            เล่มที่ส่งมาใหม่ รอรับการตรวจสอบ
+          </div>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-rose-200 bg-rose-50/20 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-rose-700">ส่งกลับแก้ไขแล้ว (In Revision)</span>
+            <span className="text-xs font-semibold text-rose-700">
+              ส่งกลับแก้ไขแล้ว (In Revision)
+            </span>
             <div className="p-2 bg-rose-100 text-rose-700 rounded-lg">
               <AlertTriangle className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-bold text-rose-700 font-mono mt-2">{rejectedQueue.length}</div>
-          <div className="text-[11px] text-rose-600 mt-1 font-medium">รอครูผู้สอนส่งเวอร์ชันใหม่</div>
+          <div className="text-2xl font-bold text-rose-700 font-mono mt-2">
+            {rejectedQueue.length}
+          </div>
+          <div className="text-[11px] text-rose-600 mt-1 font-medium">
+            รอครูผู้สอนส่งเวอร์ชันใหม่
+          </div>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-emerald-200 bg-emerald-50/20 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-emerald-700">ตรวจผ่านรับรองแล้ว (Passed)</span>
+            <span className="text-xs font-semibold text-emerald-700">
+              ตรวจผ่านรับรองแล้ว (Passed)
+            </span>
             <div className="p-2 bg-emerald-100 text-emerald-700 rounded-lg">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-bold text-emerald-700 font-mono mt-2">{completedQueue.length}</div>
-          <div className="text-[11px] text-emerald-600 mt-1 font-medium">ส่งต่อผู้บริหาร / อนุมัติสำเร็จ</div>
+          <div className="text-2xl font-bold text-emerald-700 font-mono mt-2">
+            {completedQueue.length}
+          </div>
+          <div className="text-[11px] text-emerald-600 mt-1 font-medium">
+            ส่งต่อผู้บริหาร / อนุมัติสำเร็จ
+          </div>
         </div>
       </div>
 
@@ -231,7 +250,9 @@ export const ReviewerDashboard: React.FC = () => {
                   </td>
                   <td className="px-4 py-3.5 text-slate-700">
                     <div className="font-medium">{teacher ? teacher.full_name : 'ไม่ระบุ'}</div>
-                    <div className="text-[10px] text-slate-400 font-mono">{teacher?.teacher_id}</div>
+                    <div className="text-[10px] text-slate-400 font-mono">
+                      {teacher?.teacher_id}
+                    </div>
                   </td>
                   <td className="px-4 py-3.5 text-center font-mono">
                     {submission ? (
@@ -263,7 +284,9 @@ export const ReviewerDashboard: React.FC = () => {
                         }`}
                       >
                         <CheckSquare className="w-3.5 h-3.5" />
-                        <span>{submission.status === 'PENDING_REVIEW' ? 'ตรวจเอกสาร' : 'ดูผลการตรวจ'}</span>
+                        <span>
+                          {submission.status === 'PENDING_REVIEW' ? 'ตรวจเอกสาร' : 'ดูผลการตรวจ'}
+                        </span>
                       </button>
                     ) : (
                       <span className="text-xs text-slate-400 italic">ยังไม่ส่ง</span>

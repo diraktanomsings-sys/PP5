@@ -32,7 +32,9 @@ export const TeacherDashboard: React.FC = () => {
   } = useApp();
 
   // Filter courses taught by this teacher
-  const myCourses = courses.filter((c) => c.teacher_id === currentUser.id);
+  const myCourses = courses.filter(
+    (c) => c.teacher_id === currentUser.id && c.term_id === activeTerm.id,
+  );
 
   // Match each course with its submission
   const courseItems = myCourses.map((c) => {
@@ -49,13 +51,13 @@ export const TeacherDashboard: React.FC = () => {
   // Calculate stats
   const totalCourses = myCourses.length;
   const pendingReview = courseItems.filter(
-    (item) => item.submission && item.submission.status === 'PENDING_REVIEW'
+    (item) => item.submission && item.submission.status === 'PENDING_REVIEW',
   ).length;
   const needsRevision = courseItems.filter(
-    (item) => item.submission && item.submission.status === 'REJECTED_REVISION'
+    (item) => item.submission && item.submission.status === 'REJECTED_REVISION',
   ).length;
   const finalLocked = courseItems.filter(
-    (item) => item.submission && item.submission.status === 'FINAL_LOCKED'
+    (item) => item.submission && item.submission.status === 'FINAL_LOCKED',
   ).length;
 
   return (
@@ -74,7 +76,8 @@ export const TeacherDashboard: React.FC = () => {
             สวัสดี, {currentUser.full_name}
           </h2>
           <p className="text-xs sm:text-sm text-blue-100 mt-1">
-            ยินดีต้อนรับสู่ระบบส่งและตรวจสอบ ปพ.5 ออนไลน์ ประจำปีการศึกษา {activeTerm.year} ภาคเรียนที่ {activeTerm.semester}
+            ยินดีต้อนรับสู่ระบบส่งและตรวจสอบ ปพ.5 ออนไลน์ ประจำปีการศึกษา {activeTerm.year}{' '}
+            ภาคเรียนที่ {activeTerm.semester}
           </p>
         </div>
 
@@ -121,12 +124,16 @@ export const TeacherDashboard: React.FC = () => {
             </div>
           </div>
           <div className="text-2xl font-bold text-rose-700 font-mono mt-2">{needsRevision}</div>
-          <div className="text-[11px] text-rose-600 mt-1 font-medium">ตรวจพบจุดบกพร่องที่ต้องแก้</div>
+          <div className="text-[11px] text-rose-600 mt-1 font-medium">
+            ตรวจพบจุดบกพร่องที่ต้องแก้
+          </div>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">อนุมัติสำเร็จ (Final Locked)</span>
+            <span className="text-xs font-semibold text-slate-500">
+              อนุมัติสำเร็จ (Final Locked)
+            </span>
             <div className="p-2 bg-emerald-50 text-emerald-700 rounded-lg">
               <CheckCircle2 className="w-4 h-4" />
             </div>
@@ -144,7 +151,7 @@ export const TeacherDashboard: React.FC = () => {
             <span>คำแนะนำ: สิ่งที่ครูต้องทำในรอบการประเมินนี้</span>
           </h3>
           <span className="text-xs text-slate-400 font-mono">
-            กำหนดส่งเอกสาร: 15 ตุลาคม 2569
+            กำหนดส่งเอกสาร: {new Date(activeTerm.submission_deadline).toLocaleDateString('th-TH')}
           </span>
         </div>
 
@@ -158,14 +165,15 @@ export const TeacherDashboard: React.FC = () => {
                     ด่วน: วิชา ท13101 ภาษาไทย 3 (ป.3/1) ถูกส่งกลับแก้ไข
                   </p>
                   <p className="text-[11px] text-rose-700 mt-0.5">
-                    ผู้ตรวจ (ครูกิตติศักดิ์) แจ้งว่า: ความครบถ้วนของคะแนนและแบบประเมินคุณลักษณะอันพึงประสงค์ยังไม่ครบ
+                    ผู้ตรวจ (ครูกิตติศักดิ์) แจ้งว่า:
+                    ความครบถ้วนของคะแนนและแบบประเมินคุณลักษณะอันพึงประสงค์ยังไม่ครบ
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => {
                   const rejectedSub = courseItems.find(
-                    (i) => i.submission?.status === 'REJECTED_REVISION'
+                    (i) => i.submission?.status === 'REJECTED_REVISION',
                   )?.submission;
                   if (rejectedSub) {
                     setSelectedSubmissionId(rejectedSub.id);
@@ -183,7 +191,8 @@ export const TeacherDashboard: React.FC = () => {
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-blue-600 shrink-0" />
               <span>
-                ยังเหลือรายวิชาที่ยังไม่ได้ส่งแบบสมบูรณ์: ตรวจสอบความถูกต้องของคะแนนเก็บและคุณลักษณะ 8 ประการก่อนส่ง
+                ยังเหลือรายวิชาที่ยังไม่ได้ส่งแบบสมบูรณ์: ตรวจสอบความถูกต้องของคะแนนเก็บและคุณลักษณะ
+                8 ประการก่อนส่ง
               </span>
             </div>
             <button

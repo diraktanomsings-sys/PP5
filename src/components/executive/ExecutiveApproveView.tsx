@@ -20,6 +20,7 @@ import {
 
 export const ExecutiveApproveView: React.FC = () => {
   const {
+    schoolLogoUrl,
     selectedSubmissionId,
     submissions,
     courses,
@@ -51,10 +52,10 @@ export const ExecutiveApproveView: React.FC = () => {
     );
   }
 
-  const handleConfirmSignature = (signatureData: string) => {
-    approveSubmission(submission.id, signatureData);
+  const handleConfirmSignature = async (signatureData: string) => {
+    if (!(await approveSubmission(submission.id, signatureData))) return;
     setSuccessNotice(
-      'ลงนาม e-Signature และประทับตราสถานศึกษาสำเร็จ! เอกสารถูกล็อกเล่มถาวร (FINAL_LOCKED) พร้อมสร้าง Digital Certificate Hash'
+      'ลงนาม e-Signature และประทับตราสถานศึกษาสำเร็จ! เอกสารถูกล็อกเล่มถาวร (FINAL_LOCKED) พร้อมสร้าง Digital Certificate Hash',
     );
   };
 
@@ -120,14 +121,15 @@ export const ExecutiveApproveView: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              ครูผู้สอน: <span className="font-semibold text-slate-800">{teacher?.full_name}</span> ({teacher?.department})
+              ครูผู้สอน: <span className="font-semibold text-slate-800">{teacher?.full_name}</span>{' '}
+              ({teacher?.department})
             </p>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="w-14 h-14 rounded-full border border-rose-300 p-1 bg-white shadow-xs">
               <img
-                src="/src/assets/images/official_digital_seal_1791394831777.jpg"
+                src={schoolLogoUrl}
                 alt="ตราประทับรับรองสถานศึกษา"
                 className="w-full h-full object-contain"
                 referrerPolicy="no-referrer"
@@ -140,19 +142,25 @@ export const ExecutiveApproveView: React.FC = () => {
           <div>
             <span className="text-slate-400 block text-[11px]">เกรดเฉลี่ย (GPA):</span>
             <span className="font-bold text-slate-800 font-mono text-sm">
-              {submission.average_gpa.toFixed(2)}
+              {Number.isFinite(submission.average_gpa) ? submission.average_gpa.toFixed(2) : '—'}
             </span>
           </div>
           <div>
             <span className="text-slate-400 block text-[11px]">อัตราผ่านเกณฑ์:</span>
             <span className="font-bold text-emerald-700 font-mono text-sm">
-              {submission.pass_percentage.toFixed(1)}%
+              {Number.isFinite(submission.pass_percentage)
+                ? submission.pass_percentage.toFixed(1)
+                : '—'}
+              %
             </span>
           </div>
           <div>
             <span className="text-slate-400 block text-[11px]">เวลาเรียนเฉลี่ย:</span>
             <span className="font-bold text-purple-700 font-mono text-sm">
-              {submission.average_attendance_percentage.toFixed(1)}%
+              {Number.isFinite(submission.average_attendance_percentage)
+                ? submission.average_attendance_percentage.toFixed(1)
+                : '—'}
+              %
             </span>
           </div>
           <div>
@@ -195,7 +203,8 @@ export const ExecutiveApproveView: React.FC = () => {
             เอกสารได้รับการอนุมัติและประทับตรา e-Signature เรียบร้อยแล้ว (FINAL_LOCKED)
           </h4>
           <p className="text-xs text-emerald-800 max-w-md mx-auto">
-            เอกสารถูกล็อกเล่มถาวร ป้องกันการแก้ไขย้อนหลังโดยเด็ดขาดตามมาตรฐาน Four-Eyes Principle และเก็บรักษาในคลัง ปพ.5 กลางของโรงเรียน
+            ไฟล์ต้นฉบับและหลักฐานการอนุมัติถูกเก็บในคลัง PP5
+            การแก้ไขต่อจากนี้ต้องให้ผู้ดูแลปลดล็อกพร้อมเหตุผล โดยเก็บหลักฐานเดิมไว้
           </p>
           <div className="pt-2">
             <button

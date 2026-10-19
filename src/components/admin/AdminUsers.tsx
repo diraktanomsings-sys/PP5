@@ -51,7 +51,7 @@ export const AdminUsers: React.FC = () => {
 
   // 3. Reset Password State
   const [resetPassUser, setResetPassUser] = useState<User | null>(null);
-  const [newPassInput, setNewPassInput] = useState('12345678');
+  const [newPassInput, setNewPassInput] = useState('');
   const [showNewPass, setShowNewPass] = useState(false);
 
   // 4. Admin Self Password Change State
@@ -65,6 +65,7 @@ export const AdminUsers: React.FC = () => {
   const [addCitizenId, setAddCitizenId] = useState('');
   const [addTeacherId, setAddTeacherId] = useState('');
   const [addFullName, setAddFullName] = useState('');
+  const [addPassword, setAddPassword] = useState('');
   const [addEmail, setAddEmail] = useState('');
   const [selectedAddRoles, setSelectedAddRoles] = useState<UserRole[]>(['TEACHER']);
   const [addDepartment, setAddDepartment] = useState('กลุ่มสาระการเรียนรู้ภาษาไทย');
@@ -106,18 +107,18 @@ export const AdminUsers: React.FC = () => {
   const handleOpenEditRoles = (user: User) => {
     setEditingRolesUser(user);
     setEditingRoles(
-      user.assigned_roles && user.assigned_roles.length > 0 ? user.assigned_roles : [user.role]
+      user.assigned_roles && user.assigned_roles.length > 0 ? user.assigned_roles : [user.role],
     );
   };
 
   // Save Edit Roles
-  const handleSaveEditRoles = (e: React.FormEvent) => {
+  const handleSaveEditRoles = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRolesUser || editingRoles.length === 0) return;
 
-    updateUserRoles(editingRolesUser.id, editingRoles);
+    if (!(await updateUserRoles(editingRolesUser.id, editingRoles))) return;
     setSuccessMsg(
-      `อัปเดตสิทธิ์บทบาทสำหรับ ${editingRolesUser.full_name} เป็น [${editingRoles.join(', ')}] เรียบร้อยแล้ว`
+      `อัปเดตสิทธิ์บทบาทสำหรับ ${editingRolesUser.full_name} เป็น [${editingRoles.join(', ')}] เรียบร้อยแล้ว`,
     );
     setEditingRolesUser(null);
     setTimeout(() => setSuccessMsg(null), 4000);
@@ -137,11 +138,11 @@ export const AdminUsers: React.FC = () => {
   };
 
   // Save Edit Profile
-  const handleSaveEditProfile = (e: React.FormEvent) => {
+  const handleSaveEditProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProfileUser) return;
 
-    updateUser(editingProfileUser.id, {
+    const saved = await updateUser(editingProfileUser.id, {
       full_name: profileForm.full_name.trim(),
       citizen_id: profileForm.citizen_id.trim(),
       teacher_id: profileForm.teacher_id.trim(),
@@ -150,6 +151,7 @@ export const AdminUsers: React.FC = () => {
       is_active: profileForm.is_active,
     });
 
+    if (!saved) return;
     setSuccessMsg(`บันทึกการแก้ไขข้อมูลของ ${profileForm.full_name} สำเร็จเรียบร้อย`);
     setEditingProfileUser(null);
     setTimeout(() => setSuccessMsg(null), 4000);
@@ -158,26 +160,24 @@ export const AdminUsers: React.FC = () => {
   // Open Reset Password
   const handleOpenResetPassword = (user: User) => {
     setResetPassUser(user);
-    setNewPassInput(user.role === 'ADMIN' ? 'admin1234' : '12345678');
+    setNewPassInput('');
   };
 
   // Save Reset Password
-  const handleSaveResetPassword = (e: React.FormEvent) => {
+  const handleSaveResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resetPassUser || !newPassInput.trim()) return;
 
-    const res = adminResetPassword(resetPassUser.id, newPassInput.trim());
+    const res = await adminResetPassword(resetPassUser.id, newPassInput.trim());
     if (res.success) {
-      setSuccessMsg(
-        `รีเซ็ตรหัสผ่านสำหรับ ${resetPassUser.full_name} เป็น "${newPassInput.trim()}" เรียบร้อยแล้ว`
-      );
+      setSuccessMsg(`รีเซ็ตรหัสผ่านสำหรับ ${resetPassUser.full_name} เรียบร้อยแล้ว`);
       setResetPassUser(null);
       setTimeout(() => setSuccessMsg(null), 4000);
     }
   };
 
   // Save Admin Self Password
-  const handleSaveSelfPassword = (e: React.FormEvent) => {
+  const handleSaveSelfPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setSelfPassError(null);
 
@@ -185,8 +185,8 @@ export const AdminUsers: React.FC = () => {
       setSelfPassError('กรุณากรอกรหัสผ่านปัจจุบัน');
       return;
     }
-    if (!selfNewPass || selfNewPass.length < 6) {
-      setSelfPassError('รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 6 ตัวอักษร');
+    if (!selfNewPass || selfNewPass.length < 12) {
+      setSelfPassError('รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 12 ตัวอักษร');
       return;
     }
     if (selfNewPass !== selfConfirmPass) {
@@ -194,9 +194,9 @@ export const AdminUsers: React.FC = () => {
       return;
     }
 
-    const res = changePassword(currentUser.id, selfCurrentPass, selfNewPass);
+    const res = await changePassword(currentUser.id, selfCurrentPass, selfNewPass);
     if (!res.success) {
-      setSelfPassError(res.error || 'ไม่สามารถเปลี่ยนรหัสผ่านได้');
+      setSelfPassError('ไม่สามารถเปลี่ยนรหัสผ่านได้ กรุณาตรวจสอบข้อความแจ้งข้อผิดพลาด');
     } else {
       setSuccessMsg('เปลี่ยนรหัสผ่านผู้ดูแลระบบตนเองสำเร็จเรียบร้อยแล้ว');
       setShowSelfPassModal(false);
@@ -208,16 +208,24 @@ export const AdminUsers: React.FC = () => {
   };
 
   // Add User
-  const handleAddUser = (e: React.FormEvent) => {
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!addCitizenId || !addFullName || selectedAddRoles.length === 0) return;
+    if (
+      !addTeacherId ||
+      !addEmail ||
+      !addFullName ||
+      addPassword.length < 12 ||
+      selectedAddRoles.length === 0
+    )
+      return;
 
     const newUser: User = {
       id: `u-${Date.now()}`,
+      password: addPassword,
       citizen_id: addCitizenId.trim(),
-      teacher_id: addTeacherId.trim() || `T-2569-${Math.floor(Math.random() * 900 + 100)}`,
+      teacher_id: addTeacherId.trim(),
       full_name: addFullName.trim(),
-      email: addEmail.trim() || `${addCitizenId.trim().slice(-4)}@khumuang.ac.th`,
+      email: addEmail.trim(),
       role: selectedAddRoles[0],
       assigned_roles: selectedAddRoles,
       department: addDepartment,
@@ -225,7 +233,8 @@ export const AdminUsers: React.FC = () => {
       created_at: new Date().toISOString(),
     };
 
-    setUsers([...users, newUser]);
+    if (!(await setUsers([...users, newUser]))) return;
+    setAddPassword('');
     addAuditLog({
       action_type: 'USER_ROLE_CHANGED',
       target_id: newUser.id,
@@ -237,7 +246,9 @@ export const AdminUsers: React.FC = () => {
     });
 
     setShowAddUserModal(false);
-    setSuccessMsg(`เพิ่มผู้ใช้งาน ${addFullName} พร้อมสิทธิ์ [${selectedAddRoles.join(', ')}] สำเร็จ!`);
+    setSuccessMsg(
+      `เพิ่มผู้ใช้งาน ${addFullName} พร้อมสิทธิ์ [${selectedAddRoles.join(', ')}] สำเร็จ!`,
+    );
     setTimeout(() => setSuccessMsg(null), 3000);
 
     setAddCitizenId('');
@@ -273,7 +284,8 @@ export const AdminUsers: React.FC = () => {
             จัดการข้อมูลบุคลากรและสิทธิ์ (Users & RBAC Management)
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            แก้ไขข้อมูลบุคลากร มอบหมายสิทธิ์ Single/Multi-Role รีเซ็ตรหัสผ่าน และเปลี่ยนรหัสผ่านตนเอง
+            แก้ไขข้อมูลบุคลากร มอบหมายสิทธิ์ Single/Multi-Role รีเซ็ตรหัสผ่าน
+            และเปลี่ยนรหัสผ่านตนเอง
           </p>
         </div>
 
@@ -304,7 +316,6 @@ export const AdminUsers: React.FC = () => {
           </button>
         </div>
       </div>
-
 
       {successMsg && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs flex items-center gap-2 animate-in fade-in">
@@ -371,7 +382,7 @@ export const AdminUsers: React.FC = () => {
                           <span
                             key={r}
                             className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getRoleBadge(
-                              r
+                              r,
                             )}`}
                           >
                             {r}
@@ -445,32 +456,25 @@ export const AdminUsers: React.FC = () => {
             <form onSubmit={handleSaveEditProfile} className="space-y-4 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    ชื่อ - นามสกุล *
-                  </label>
+                  <label className="block font-bold text-slate-700 mb-1">ชื่อ - นามสกุล *</label>
                   <input
                     type="text"
                     required
                     value={profileForm.full_name}
-                    onChange={(e) =>
-                      setProfileForm({ ...profileForm, full_name: e.target.value })
-                    }
+                    onChange={(e) => setProfileForm({ ...profileForm, full_name: e.target.value })}
                     className="w-full p-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-600"
                   />
                 </div>
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    เลขประจำตัวประชาชน (13 หลัก) *
+                    เลขประจำตัวประชาชน (13 หลัก ถ้ามี)
                   </label>
                   <input
                     type="text"
-                    required
                     maxLength={13}
                     value={profileForm.citizen_id}
-                    onChange={(e) =>
-                      setProfileForm({ ...profileForm, citizen_id: e.target.value })
-                    }
+                    onChange={(e) => setProfileForm({ ...profileForm, citizen_id: e.target.value })}
                     className="w-full p-2.5 border border-slate-300 rounded-xl font-mono focus:outline-none focus:ring-1 focus:ring-blue-600"
                   />
                 </div>
@@ -485,23 +489,17 @@ export const AdminUsers: React.FC = () => {
                     type="text"
                     required
                     value={profileForm.teacher_id}
-                    onChange={(e) =>
-                      setProfileForm({ ...profileForm, teacher_id: e.target.value })
-                    }
+                    onChange={(e) => setProfileForm({ ...profileForm, teacher_id: e.target.value })}
                     className="w-full p-2.5 border border-slate-300 rounded-xl font-mono focus:outline-none focus:ring-1 focus:ring-blue-600"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    อีเมลทางการศึกษา
-                  </label>
+                  <label className="block font-bold text-slate-700 mb-1">อีเมลทางการศึกษา</label>
                   <input
                     type="email"
                     value={profileForm.email}
-                    onChange={(e) =>
-                      setProfileForm({ ...profileForm, email: e.target.value })
-                    }
+                    onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
                     className="w-full p-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-600"
                   />
                 </div>
@@ -513,9 +511,7 @@ export const AdminUsers: React.FC = () => {
                 </label>
                 <select
                   value={profileForm.department}
-                  onChange={(e) =>
-                    setProfileForm({ ...profileForm, department: e.target.value })
-                  }
+                  onChange={(e) => setProfileForm({ ...profileForm, department: e.target.value })}
                   className="w-full p-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-600"
                 >
                   <option value="กลุ่มสาระการเรียนรู้ภาษาไทย">กลุ่มสาระฯ ภาษาไทย</option>
@@ -548,12 +544,13 @@ export const AdminUsers: React.FC = () => {
                   type="checkbox"
                   id="userActiveCheck"
                   checked={profileForm.is_active}
-                  onChange={(e) =>
-                    setProfileForm({ ...profileForm, is_active: e.target.checked })
-                  }
+                  onChange={(e) => setProfileForm({ ...profileForm, is_active: e.target.checked })}
                   className="w-4 h-4 text-blue-600 rounded border-slate-300"
                 />
-                <label htmlFor="userActiveCheck" className="font-semibold text-slate-700 cursor-pointer">
+                <label
+                  htmlFor="userActiveCheck"
+                  className="font-semibold text-slate-700 cursor-pointer"
+                >
                   เปิดใช้งานบัญชีบุคลากรนี้ในระบบ (Active Account)
                 </label>
               </div>
@@ -644,7 +641,7 @@ export const AdminUsers: React.FC = () => {
                         </div>
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getRoleBadge(
-                            r
+                            r,
                           )}`}
                         >
                           {r}
@@ -706,9 +703,7 @@ export const AdminUsers: React.FC = () => {
 
             <form onSubmit={handleSaveResetPassword} className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  กำหนดรหัสผ่านใหม่ *
-                </label>
+                <label className="block font-bold text-slate-700 mb-1">กำหนดรหัสผ่านใหม่ *</label>
                 <div className="relative">
                   <input
                     type={showNewPass ? 'text' : 'password'}
@@ -728,17 +723,7 @@ export const AdminUsers: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setNewPassInput(resetPassUser.role === 'ADMIN' ? 'admin1234' : '12345678')
-                  }
-                  className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-medium transition-colors"
-                >
-                  ใช้ค่ามาตรฐาน ({resetPassUser.role === 'ADMIN' ? 'admin1234' : '12345678'})
-                </button>
-              </div>
+              <div className="flex items-center gap-2"></div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
@@ -788,9 +773,7 @@ export const AdminUsers: React.FC = () => {
 
             <form onSubmit={handleSaveSelfPassword} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  รหัสผ่านปัจจุบัน *
-                </label>
+                <label className="block font-bold text-slate-700 mb-1">รหัสผ่านปัจจุบัน *</label>
                 <input
                   type="password"
                   required
@@ -802,23 +785,19 @@ export const AdminUsers: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  รหัสผ่านใหม่ *
-                </label>
+                <label className="block font-bold text-slate-700 mb-1">รหัสผ่านใหม่ *</label>
                 <input
                   type="password"
                   required
                   value={selfNewPass}
                   onChange={(e) => setSelfNewPass(e.target.value)}
-                  placeholder="ความยาวอย่างน้อย 6 ตัวอักษร"
+                  placeholder="ความยาวอย่างน้อย 12 ตัวอักษร"
                   className="w-full p-2.5 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  ยืนยันรหัสผ่านใหม่ *
-                </label>
+                <label className="block font-bold text-slate-700 mb-1">ยืนยันรหัสผ่านใหม่ *</label>
                 <input
                   type="password"
                   required
@@ -869,9 +848,7 @@ export const AdminUsers: React.FC = () => {
             <form onSubmit={handleAddUser} className="space-y-3.5 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    ชื่อ - นามสกุล *
-                  </label>
+                  <label className="block font-bold text-slate-700 mb-1">ชื่อ - นามสกุล *</label>
                   <input
                     type="text"
                     required
@@ -884,11 +861,10 @@ export const AdminUsers: React.FC = () => {
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    เลขประจำตัวประชาชน (13 หลัก) *
+                    เลขประจำตัวประชาชน (13 หลัก ถ้ามี)
                   </label>
                   <input
                     type="text"
-                    required
                     maxLength={13}
                     value={addCitizenId}
                     onChange={(e) => setAddCitizenId(e.target.value)}
@@ -900,11 +876,10 @@ export const AdminUsers: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    รหัสประจำตัวครู
-                  </label>
+                  <label className="block font-bold text-slate-700 mb-1">รหัสประจำตัวครู</label>
                   <input
                     type="text"
+                    required
                     value={addTeacherId}
                     onChange={(e) => setAddTeacherId(e.target.value)}
                     placeholder="เช่น T-2569-099"
@@ -916,12 +891,25 @@ export const AdminUsers: React.FC = () => {
                   <label className="block font-bold text-slate-700 mb-1">อีเมลติดต่อ</label>
                   <input
                     type="email"
+                    required
                     value={addEmail}
                     onChange={(e) => setAddEmail(e.target.value)}
                     placeholder="teacher@khumuang.ac.th"
                     className="w-full p-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-600"
                   />
                 </div>
+                <label className="block mt-3 text-xs font-bold">
+                  รหัสผ่านเริ่มต้นเฉพาะบัญชี (อย่างน้อย 12 ตัวอักษร)
+                  <input
+                    type="password"
+                    required
+                    minLength={12}
+                    autoComplete="new-password"
+                    value={addPassword}
+                    onChange={(e) => setAddPassword(e.target.value)}
+                    className="mt-1 w-full p-2.5 border rounded-lg"
+                  />
+                </label>
               </div>
 
               <div>
@@ -933,9 +921,13 @@ export const AdminUsers: React.FC = () => {
                 >
                   <option value="กลุ่มสาระการเรียนรู้ภาษาไทย">กลุ่มสาระฯ ภาษาไทย</option>
                   <option value="กลุ่มสาระการเรียนรู้คณิตศาสตร์">กลุ่มสาระฯ คณิตศาสตร์</option>
-                  <option value="กลุ่มสาระการเรียนรู้วิทยาศาสตร์และเทคโนโลยี">กลุ่มสาระฯ วิทยาศาสตร์</option>
+                  <option value="กลุ่มสาระการเรียนรู้วิทยาศาสตร์และเทคโนโลยี">
+                    กลุ่มสาระฯ วิทยาศาสตร์
+                  </option>
                   <option value="กลุ่มสาระการเรียนรู้สังคมศึกษาฯ">กลุ่มสาระฯ สังคมศึกษา</option>
-                  <option value="กลุ่มสาระการเรียนรู้ภาษาต่างประเทศ">กลุ่มสาระฯ ภาษาต่างประเทศ</option>
+                  <option value="กลุ่มสาระการเรียนรู้ภาษาต่างประเทศ">
+                    กลุ่มสาระฯ ภาษาต่างประเทศ
+                  </option>
                   <option value="กลุ่มงานทะเบียนและวัดผล">กลุ่มงานทะเบียนและวัดผล</option>
                   <option value="ฝ่ายบริหารสถานศึกษา">ฝ่ายบริหารสถานศึกษา</option>
                 </select>

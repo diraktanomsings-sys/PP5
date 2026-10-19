@@ -7,6 +7,9 @@ export interface Person {
   teacherId: string;
   roles: Role[];
   active: boolean;
+  department?: string;
+  citizenId?: string;
+  createdAt?: string;
 }
 export interface Term {
   id: string;
@@ -14,6 +17,9 @@ export interface Term {
   semester: number;
   deadline: string;
   active: boolean;
+  reviewDeadline?: string;
+  archived?: boolean;
+  createdAt?: string;
 }
 export interface Course {
   id: string;
@@ -24,6 +30,11 @@ export interface Course {
   teacherId: string;
   reviewerId: string;
   open: boolean;
+  department?: string;
+  creditHours?: number;
+  scoreRatio?: string;
+  assignmentType?: 'DEPARTMENT' | 'GRADE_LEVEL';
+  createdAt?: string;
 }
 export interface FileRecord {
   id: string;
@@ -39,7 +50,28 @@ export interface Version {
   submittedAt: string;
   submittedBy: string;
   notes: string;
-  review?: { by: string; at: string; pass: boolean; notes: string; checks: boolean[] };
+  driveUrl?: string;
+  metrics?: {
+    averageGpa: number;
+    passPercentage: number;
+    averageAttendance: number | null;
+    studentCount?: number;
+  };
+  findings?: Array<{
+    by: string;
+    at: string;
+    location: string;
+    comment: string;
+    issueType: string;
+  }>;
+  review?: {
+    by: string;
+    at: string;
+    pass: boolean;
+    notes: string;
+    checks: boolean[];
+    annotated?: FileRecord;
+  };
 }
 export interface Submission {
   id: string;
@@ -56,6 +88,13 @@ export interface Submission {
     pdfHash: string;
     excelHash: string;
   };
+  approvalHistory?: Array<{
+    version: number;
+    approval: NonNullable<Submission['approval']>;
+    unlockedAt: string;
+    by: string;
+    reason: string;
+  }>;
 }
 export interface Audit {
   id: string;
@@ -75,6 +114,12 @@ export interface Snapshot {
   submissions: Submission[];
   audit: Audit[];
   storage: 'local' | 'blob';
+  settings?: SchoolSettings;
+}
+export interface SchoolSettings {
+  schoolLogo?: string;
+  organizationDriveUrl?: string;
+  organizationDriveTitle?: string;
 }
 export const roleNames: Record<Role, string> = {
   TEACHER: 'ครูผู้สอน',

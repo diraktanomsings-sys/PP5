@@ -80,8 +80,8 @@ export const RoleSelectionView: React.FC = () => {
           buttonBg: 'bg-slate-900 hover:bg-slate-800 text-white',
           tasks: [
             'วิเคราะห์ Workflow Bottleneck Tracker',
-            'AI Auto-Balance เกลี่ยภาระงานผู้ตรวจ',
-            'ส่งออก Audit Logs ตามเกณฑ์ ITA & PDPA',
+            'Auto-Balance เกลี่ยภาระงานผู้ตรวจ',
+            'ตรวจสอบและส่งออกประวัติการทำรายการ',
           ],
         };
     }
@@ -108,9 +108,7 @@ export const RoleSelectionView: React.FC = () => {
                 <span>·</span>
                 <span>{currentUser.department}</span>
               </div>
-              <h2 className="text-xl font-bold mt-1 text-white">
-                สวัสดี, {currentUser.full_name}
-              </h2>
+              <h2 className="text-xl font-bold mt-1 text-white">สวัสดี, {currentUser.full_name}</h2>
               <p className="text-xs text-blue-100 mt-0.5">
                 คุณได้รับมอบหมาย {assignedRoles.length} บทบาทในระบบ ปพ.5 ออนไลน์
               </p>
@@ -137,7 +135,8 @@ export const RoleSelectionView: React.FC = () => {
               เลือกบทบาทการปฏิบัติงานในเซสชันนี้ (Select Operating Role)
             </h3>
             <p className="text-xs text-slate-500 mt-1">
-              คลิกเลือกบทบาทที่ต้องการเข้าใช้งาน แถบเมนูด้านข้างและสิทธิ์การเข้าถึงจะปรับเปลี่ยนตามบทบาทที่เลือกโดยอัตโนมัติ
+              คลิกเลือกบทบาทที่ต้องการเข้าใช้งาน
+              แถบเมนูด้านข้างและสิทธิ์การเข้าถึงจะปรับเปลี่ยนตามบทบาทที่เลือกโดยอัตโนมัติ
             </p>
           </div>
 
@@ -163,7 +162,9 @@ export const RoleSelectionView: React.FC = () => {
                           <p className="text-[11px] text-slate-500">{details.subtitle}</p>
                         </div>
                       </div>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${details.badgeBg}`}>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border ${details.badgeBg}`}
+                      >
                         {role}
                       </span>
                     </div>
@@ -201,8 +202,9 @@ export const RoleSelectionView: React.FC = () => {
           <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-2xl flex items-start gap-3 text-xs text-blue-950">
             <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
             <p className="leading-relaxed text-[11px]">
-              <span className="font-bold">เคล็ดลับการใช้งาน:</span> คุณสามารถคลิกสลับบทบาท (Switch Role)
-              ได้ตลอดเวลาผ่านเมนูโปรไฟล์บริเวณมุมบนขวาของหน้าจอ หรือคลิกปุ่มสลับบทบาทในแถบเมนูด้านข้าง
+              <span className="font-bold">เคล็ดลับการใช้งาน:</span> คุณสามารถคลิกสลับบทบาท (Switch
+              Role) ได้ตลอดเวลาผ่านเมนูโปรไฟล์บริเวณมุมบนขวาของหน้าจอ
+              หรือคลิกปุ่มสลับบทบาทในแถบเมนูด้านข้าง
             </p>
           </div>
         </div>

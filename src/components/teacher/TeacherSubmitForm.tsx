@@ -27,6 +27,7 @@ export const TeacherSubmitForm: React.FC = () => {
   const {
     currentUser,
     courses,
+    submissions,
     activeTerm,
     submitPP5,
     setActiveView,
@@ -34,33 +35,42 @@ export const TeacherSubmitForm: React.FC = () => {
     organizationDriveFolderId,
   } = useApp();
 
-  const myCourses = courses.filter((c) => c.teacher_id === currentUser.id);
-  const [selectedCourseId, setSelectedCourseId] = useState<string>(myCourses[0]?.id || courses[0]?.id || '');
-  const selectedCourse = courses.find((c) => c.id === selectedCourseId) || courses[0];
+  const myCourses = courses.filter(
+    (c) => c.teacher_id === currentUser.id && c.term_id === activeTerm.id,
+  );
+  const [selectedCourseId, setSelectedCourseId] = useState<string>(myCourses[0]?.id || '');
+  const selectedCourse = myCourses.find((c) => c.id === selectedCourseId) || myCourses[0];
 
   const cleanGrade = selectedCourse?.grade_level.replace('/', '-') || 'ป.3-1';
   const cleanTeacher = currentUser?.full_name.replace(/\s+/g, '_') || 'ครูผู้สอน';
   const cleanSubject = selectedCourse?.course_name.replace(/\s+/g, '') || 'วิชา';
 
   // Official Standardized Naming Convention
-  const autoExcelName = `ปพ5_${activeTerm.year}_ภาคเรียนที่${activeTerm.semester}_${cleanGrade}_${selectedCourse.course_code}_${cleanSubject}_${cleanTeacher}.xlsx`;
-  const autoPdfName = `ปพ5_${activeTerm.year}_ภาคเรียนที่${activeTerm.semester}_${cleanGrade}_${selectedCourse.course_code}_${cleanSubject}_${cleanTeacher}.pdf`;
+  const autoExcelName = `ปพ5_${activeTerm.year}_ภาคเรียนที่${activeTerm.semester}_${cleanGrade}_${selectedCourse?.course_code}_${cleanSubject}_${cleanTeacher}.xlsx`;
+  const autoPdfName = `ปพ5_${activeTerm.year}_ภาคเรียนที่${activeTerm.semester}_${cleanGrade}_${selectedCourse?.course_code}_${cleanSubject}_${cleanTeacher}.pdf`;
 
-  const [hasExcel, setHasExcel] = useState(true);
-  const [hasPdf, setHasPdf] = useState(true);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [hasExcel, setHasExcel] = useState(false);
+  const [hasPdf, setHasPdf] = useState(false);
   const [customExcelName, setCustomExcelName] = useState<string>(autoExcelName);
   const [customPdfName, setCustomPdfName] = useState<string>(autoPdfName);
   const [originalExcelUploadName, setOriginalExcelUploadName] = useState<string | null>(null);
   const [originalPdfUploadName, setOriginalPdfUploadName] = useState<string | null>(null);
-  const [excelFileSize, setExcelFileSize] = useState<string>('3.4 MB');
-  const [pdfFileSize, setPdfFileSize] = useState<string>('4.1 MB');
+  const [excelFileSize, setExcelFileSize] = useState<string>('');
+  const [pdfFileSize, setPdfFileSize] = useState<string>('');
 
   useEffect(() => {
     setCustomExcelName(autoExcelName);
     setCustomPdfName(autoPdfName);
+    setExcelFile(null);
+    setPdfFile(null);
+    setHasExcel(false);
+    setHasPdf(false);
+    setIsConfirmed(false);
   }, [selectedCourseId, activeTerm.year, activeTerm.semester]);
 
-  const [isConfirmed, setIsConfirmed] = useState(true);
+  const [isConfirmed, setIsConfirmed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -71,6 +81,7 @@ export const TeacherSubmitForm: React.FC = () => {
   const handleExcelFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setExcelFile(file);
       setOriginalExcelUploadName(file.name);
       // Immediately and automatically apply system standardized name
       setCustomExcelName(autoExcelName);
@@ -82,6 +93,7 @@ export const TeacherSubmitForm: React.FC = () => {
   const handlePdfFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setPdfFile(file);
       setOriginalPdfUploadName(file.name);
       // Immediately and automatically apply system standardized name
       setCustomPdfName(autoPdfName);
@@ -90,33 +102,35 @@ export const TeacherSubmitForm: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hasExcel || !hasPdf) {
-      setErrorMsg('จำเป็นต้องอัปโหลดทั้งสองไฟล์ (Excel + PDF) ก่อนดำเนินการส่ง');
+    if (!selectedCourse || !excelFile || !pdfFile || !hasExcel || !hasPdf || !isConfirmed) {
+      setErrorMsg('กรุณาเลือกไฟล์ .xlsx และ .pdf จริง พร้อมยืนยันความถูกต้อง');
       return;
     }
-    if (!isConfirmed) {
-      setErrorMsg('กรุณาทำเครื่องหมายยืนยันความถูกต้องของข้อมูล');
-      return;
-    }
-
     setIsSubmitting(true);
     setErrorMsg(null);
-
-    setTimeout(() => {
-      submitPP5(
-        selectedCourse.id,
-        customExcelName || autoExcelName,
-        customPdfName || autoPdfName,
-        '',
-        ''
-      );
-      setIsSubmitting(false);
-      setActiveView('teacher/dashboard');
-    }, 700);
+    const ex = new File(
+      [excelFile],
+      (customExcelName || autoExcelName).slice(0, 170).replace(/\.xlsx$/i, '') + '.xlsx',
+      { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+    );
+    const pd = new File(
+      [pdfFile],
+      (customPdfName || autoPdfName).slice(0, 170).replace(/\.pdf$/i, '') + '.pdf',
+      { type: 'application/pdf' },
+    );
+    const ok = await submitPP5(selectedCourse.id, ex, pd);
+    setIsSubmitting(false);
+    if (ok) setActiveView('teacher/dashboard');
   };
 
+  if (!selectedCourse)
+    return (
+      <div className="p-8 bg-white rounded-2xl border text-slate-600">
+        ยังไม่มีรายวิชาที่มอบหมายให้คุณในภาคเรียนนี้ กรุณาติดต่อผู้ดูแลระบบ
+      </div>
+    );
   return (
     <div className="space-y-6">
       {/* 1. Top Breadcrumb & Title Row matching the screenshot */}
@@ -209,13 +223,16 @@ export const TeacherSubmitForm: React.FC = () => {
                 <select
                   value={selectedCourse.grade_level}
                   onChange={(e) => {
-                    const match = courses.find((c) => c.grade_level === e.target.value);
+                    const match = myCourses.find((c) => c.grade_level === e.target.value);
                     if (match) setSelectedCourseId(match.id);
                   }}
                   className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                 >
-                  <option value="ป.3/1">ประถมศึกษาปีที่ 3 (ป.3/1)</option>
-                  <option value="ม.1/1">มัธยมศึกษาปีที่ 1 (ม.1/1)</option>
+                  {[...new Set(myCourses.map((c) => c.grade_level))].map((grade) => (
+                    <option key={grade} value={grade}>
+                      {grade}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -228,7 +245,7 @@ export const TeacherSubmitForm: React.FC = () => {
                   onChange={(e) => setSelectedCourseId(e.target.value)}
                   className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                 >
-                  {courses.map((c) => (
+                  {myCourses.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.course_name} ({c.course_code})
                     </option>
@@ -241,7 +258,7 @@ export const TeacherSubmitForm: React.FC = () => {
                   รหัสวิชา (อัตโนมัติ)
                 </label>
                 <div className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-mono font-bold">
-                  <span>{selectedCourse.course_code}</span>
+                  <span>{selectedCourse?.course_code}</span>
                   <Lock className="w-3.5 h-3.5 text-slate-400" />
                 </div>
               </div>
@@ -261,7 +278,11 @@ export const TeacherSubmitForm: React.FC = () => {
                   รอบการส่ง / เวอร์ชั่น
                 </label>
                 <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-medium">
-                  <span>ส่งครั้งแรก (Version V001)</span>
+                  <span>
+                    ฉบับที่{' '}
+                    {(submissions.find((s) => s.course_id === selectedCourse.id)?.current_version ||
+                      0) + 1}
+                  </span>
                 </div>
               </div>
             </div>
@@ -292,14 +313,14 @@ export const TeacherSubmitForm: React.FC = () => {
                   <span className="font-bold text-slate-800">
                     1. ไฟล์ต้นฉบับ Excel <span className="text-rose-500">*</span>
                   </span>
-                  <span className="text-[10px] text-slate-400">.xlsx, .xlsm (สูงสุด 25MB)</span>
+                  <span className="text-[10px] text-slate-400">.xlsx (สูงสุด 25MB)</span>
                 </div>
 
                 <input
                   type="file"
                   ref={excelInputRef}
                   onChange={handleExcelFileChange}
-                  accept=".xlsx,.xls,.xlsm"
+                  accept=".xlsx"
                   className="hidden"
                 />
 
@@ -311,7 +332,7 @@ export const TeacherSubmitForm: React.FC = () => {
                     <FileSpreadsheet className="w-5 h-5" />
                   </div>
                   <div className="text-xs font-bold text-slate-800">
-                    ลากไฟล์ Excel มาวาง หรือ คลิกเพื่อเลือกจากเครื่อง
+                    คลิกเพื่อเลือกไฟล์ Excel จากเครื่อง
                   </div>
                   <div className="text-[10px] text-slate-400 mt-0.5">
                     ไฟล์บันทึกคะแนนตัวชี้วัดฉบับเต็ม (.xlsx)
@@ -326,7 +347,10 @@ export const TeacherSubmitForm: React.FC = () => {
                         <FileSpreadsheet className="w-4 h-4" />
                       </div>
                       <div className="overflow-hidden">
-                        <div className="font-mono font-bold text-slate-800 text-[11px] truncate" title={customExcelName}>
+                        <div
+                          className="font-mono font-bold text-slate-800 text-[11px] truncate"
+                          title={customExcelName}
+                        >
                           {customExcelName}
                         </div>
                         <div className="text-[10px] text-slate-400 flex items-center gap-1">
@@ -383,7 +407,7 @@ export const TeacherSubmitForm: React.FC = () => {
                     <FileText className="w-5 h-5" />
                   </div>
                   <div className="text-xs font-bold text-slate-800">
-                    ลากไฟล์ PDF มาวาง หรือ คลิกเพื่อเลือกจากเครื่อง
+                    คลิกเพื่อเลือกไฟล์ PDF จากเครื่อง
                   </div>
                   <div className="text-[10px] text-slate-400 mt-0.5">
                     ไฟล์ Export สำหรับลงนามอิเล็กทรอนิกส์ (.pdf)
@@ -398,7 +422,10 @@ export const TeacherSubmitForm: React.FC = () => {
                         <FileText className="w-4 h-4" />
                       </div>
                       <div className="overflow-hidden">
-                        <div className="font-mono font-bold text-slate-800 text-[11px] truncate" title={customPdfName}>
+                        <div
+                          className="font-mono font-bold text-slate-800 text-[11px] truncate"
+                          title={customPdfName}
+                        >
                           {customPdfName}
                         </div>
                         <div className="text-[10px] text-slate-400 flex items-center gap-1">
@@ -447,7 +474,8 @@ export const TeacherSubmitForm: React.FC = () => {
                     </span>
                   </div>
                   <p className="text-[11px] text-blue-800 leading-relaxed">
-                    ไม่ว่าครูจะเลือกไฟล์ชื่อใดมาอัปโหลด ระบบจะทำการแปลงชื่อไฟล์ให้เป็นรหัสมาตรฐานทางราชการทันทีโดยไม่ต้องเปลี่ยนชื่อไฟล์เอง
+                    ไม่ว่าครูจะเลือกไฟล์ชื่อใดมาอัปโหลด
+                    ระบบจะทำการแปลงชื่อไฟล์ให้เป็นรหัสมาตรฐานทางราชการทันทีโดยไม่ต้องเปลี่ยนชื่อไฟล์เอง
                   </p>
                 </div>
               </div>
@@ -457,7 +485,10 @@ export const TeacherSubmitForm: React.FC = () => {
                   {originalExcelUploadName && (
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px]">
                       <span className="text-slate-500">
-                        ไฟล์ Excel เดิม: <span className="line-through text-slate-400">{originalExcelUploadName}</span>
+                        ไฟล์ Excel เดิม:{' '}
+                        <span className="line-through text-slate-400">
+                          {originalExcelUploadName}
+                        </span>
                       </span>
                       <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded truncate max-w-md">
                         ✓ ตั้งชื่อใหม่: {customExcelName}
@@ -467,7 +498,8 @@ export const TeacherSubmitForm: React.FC = () => {
                   {originalPdfUploadName && (
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px]">
                       <span className="text-slate-500">
-                        ไฟล์ PDF เดิม: <span className="line-through text-slate-400">{originalPdfUploadName}</span>
+                        ไฟล์ PDF เดิม:{' '}
+                        <span className="line-through text-slate-400">{originalPdfUploadName}</span>
                       </span>
                       <span className="font-mono font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded truncate max-w-md">
                         ✓ ตั้งชื่อใหม่: {customPdfName}
@@ -500,7 +532,7 @@ export const TeacherSubmitForm: React.FC = () => {
                 className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
               >
                 <FileText className="w-4 h-4" />
-                <span>ยกเลิก / บันทึกร่าง</span>
+                <span>ยกเลิก / กลับหน้าภาพรวม</span>
               </button>
 
               <button
@@ -522,8 +554,7 @@ export const TeacherSubmitForm: React.FC = () => {
             <div>
               <span className="font-bold text-amber-950">ขั้นตอนต่อไปหลังจากการส่ง:</span>
               <p className="text-[11px] text-amber-900 mt-0.5 leading-relaxed">
-                ผู้ตรวจเอกสาร (หัวหน้ากลุ่มสาระฯ / นายทะเบียน) จะได้รับแจ้งเตือนในระบบทันที
-                และดำเนินการตรวจสอบความสมบูรณ์ของคะแนนภายใน 3 วันทำการ
+                ผู้ตรวจที่ได้รับมอบหมายจะเห็นเอกสารในคิวเมื่อเปิดหน้าหรือรีเฟรชข้อมูล
                 หากมีข้อแก้ไขระบบจะแจ้งเตือนพร้อมข้อเสนอแนะ
               </p>
             </div>
@@ -572,96 +603,24 @@ export const TeacherSubmitForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Widget 2: สรุปความพร้อม ป.3 ภาษาไทย */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs text-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-slate-900">
-                สรุปความพร้อม {selectedCourse.grade_level} {selectedCourse.course_name}
-              </span>
-              <span className="text-[10px] text-slate-500 font-mono">นักเรียน 36 คน</span>
-            </div>
-
-            <div className="flex items-center gap-4 py-1">
-              {/* Circular gauge */}
-              <div className="relative w-20 h-20 shrink-0 flex items-center justify-center">
-                <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                  <path
-                    className="text-slate-100"
-                    strokeWidth="3.5"
-                    stroke="currentColor"
-                    fill="none"
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  />
-                  <path
-                    className="text-emerald-500"
-                    strokeDasharray="100, 100"
-                    strokeWidth="3.5"
-                    strokeLinecap="round"
-                    stroke="currentColor"
-                    fill="none"
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                  <span className="text-sm font-bold text-slate-900 font-mono">100%</span>
-                  <span className="text-[9px] text-slate-400">สมบูรณ์</span>
-                </div>
-              </div>
-
-              <div className="flex-1 space-y-2 text-[11px]">
-                <div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>คะแนนหน่วยเก็บ:</span>
-                    <span className="font-bold text-slate-900 font-mono">36/36 คน (100%)</span>
-                  </div>
-                  <div className="w-full bg-slate-100 h-1.5 rounded-full mt-1 overflow-hidden">
-                    <div className="bg-blue-700 h-full w-full rounded-full" />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>เวลาเรียน:</span>
-                    <span className="font-bold text-emerald-700">ครบเกณฑ์ทุกคน</span>
-                  </div>
-                  <div className="w-full bg-slate-100 h-1.5 rounded-full mt-1 overflow-hidden">
-                    <div className="bg-emerald-600 h-full w-full rounded-full" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-slate-100 text-[10px] text-slate-500 text-center font-medium">
-              ✓ ตรวจสอบโครงสร้างตารางคะแนนมาตรฐาน สพป. เรียบร้อย
-            </div>
-          </div>
-
-          {/* Widget 3: ประวัติการอัปเดตไฟล์วิชานี้ */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs text-xs space-y-3">
-            <h4 className="font-bold text-slate-900 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-blue-700" />
-              <span>ประวัติการอัปเดตไฟล์วิชานี้</span>
-            </h4>
-
-            <div className="space-y-3 pl-2 border-l-2 border-slate-200">
-              <div className="relative pl-3">
-                <div className="absolute -left-[17px] top-1 w-2.5 h-2.5 rounded-full bg-blue-600 ring-4 ring-white" />
-                <div className="font-semibold text-slate-800">บันทึกฉบับร่างล่าสุด</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">
-                  วันนี้ เวลา 09:42 น. โดย {currentUser.full_name}
-                </div>
-              </div>
-
-              <div className="relative pl-3">
-                <div className="absolute -left-[17px] top-1 w-2.5 h-2.5 rounded-full bg-slate-300 ring-4 ring-white" />
-                <div className="font-semibold text-slate-800">
-                  สร้างเอกสารห้อง {selectedCourse.grade_level}
-                </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">
-                  14 ต.ค. 2569 เวลา 15:20 น.
-                </div>
-              </div>
-            </div>
+            <h4 className="font-bold text-slate-900">สรุปไฟล์ที่เลือก</h4>
+            <p>Excel: {excelFile?.name || 'ยังไม่ได้เลือก'}</p>
+            <p>PDF: {pdfFile?.name || 'ยังไม่ได้เลือก'}</p>
+            <p className="text-slate-500">
+              ตรวจคะแนน เวลาเรียน และข้อมูลนักเรียนในไฟล์ก่อนยืนยันส่ง
+              สถิติจะแสดงหลังส่งเมื่อพบคอลัมน์ผลการเรียนที่ระบบอ่านได้
+            </p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs text-xs space-y-3">
+            <h4 className="font-bold text-slate-900">ประวัติการส่งวิชานี้</h4>
+            {submissions
+              .find((s) => s.course_id === selectedCourse.id)
+              ?.versions.map((v) => (
+                <p key={v.id}>
+                  {v.version_number} · {new Date(v.submitted_at).toLocaleString('th-TH')}
+                </p>
+              )) || <p className="text-slate-500">ยังไม่มีประวัติการส่ง</p>}
           </div>
 
           {/* Widget 4: พบปัญหาการอัปโหลดไฟล์? (Dark blue card) */}
@@ -673,7 +632,7 @@ export const TeacherSubmitForm: React.FC = () => {
               <h5 className="font-bold text-white text-xs">พบปัญหาการอัปโหลดไฟล์?</h5>
             </div>
             <p className="text-[11px] text-blue-200/80 leading-relaxed pt-1">
-              ติดต่อกลุ่มงานสารสนเทศ เบอร์ภายใน 104 หรือแจ้งฝ่ายทะเบียนและวัดผล
+              ติดต่อผู้ดูแล PP5 หรืองานทะเบียนและวัดผลของโรงเรียน
             </p>
           </div>
         </div>

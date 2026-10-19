@@ -13,56 +13,64 @@ import {
 export const AdminCalendar: React.FC = () => {
   const { activeTerm, extendDeadline } = useApp();
 
-  const [newDeadlineDate, setNewDeadlineDate] = useState('2026-10-20T23:59');
-  const [officialReason, setOfficialReason] = useState(
-    'คำสั่งโรงเรียนบ้านคูเมือง ที่ 145/2569 เรื่อง ขยายเวลาส่งแบบ ปพ.5 เนื่องจากครูติดภารกิจนำนักเรียนเข้าร่วมแข่งขันศิลปหัตถกรรมนักเรียน ระดับเขตพื้นที่'
-  );
-  const [approverName, setApproverName] = useState(
-    'ดร.วิรัตน์ ถนอมสิงห์ (ผู้อำนวยการโรงเรียนบ้านคูเมือง)'
-  );
+  const [newDeadlineDate, setNewDeadlineDate] = useState('');
+  const [officialReason, setOfficialReason] = useState('');
+  const [approverName, setApproverName] = useState('');
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const scheduleSteps = [
     {
       step: 1,
       title: 'ครูผู้สอนส่งไฟล์คู่ (Excel + PDF)',
-      period: '1 - 15 ต.ค. 2569',
+      period: new Date(activeTerm.submission_deadline).toLocaleDateString('th-TH', {
+        timeZone: 'Asia/Bangkok',
+      }),
       status: 'CURRENT',
       desc: 'ตรวจความถูกต้องของคะแนนตัวชี้วัดและเวลาเรียน 80%',
     },
     {
       step: 2,
       title: 'ผู้ตรวจตรวจสอบตามเกณฑ์ 4 ด้าน',
-      period: '16 - 22 ต.ค. 2569',
+      period: new Date(activeTerm.review_deadline).toLocaleDateString('th-TH', {
+        timeZone: 'Asia/Bangkok',
+      }),
       status: 'UPCOMING',
       desc: 'หัวหน้ากลุ่มสาระและงานทะเบียนตรวจรับรองหรือส่งกลับแก้ไข',
     },
     {
       step: 3,
       title: 'การส่งกลับแก้ไขรอบสุดท้าย (Revisions Window)',
-      period: '23 - 25 ต.ค. 2569',
+      period: 'กำหนดตามผลการตรวจ',
       status: 'UPCOMING',
       desc: 'ครูอัปโหลดไฟล์แก้ไข V002 / V003 ตามจุดบกพร่องที่คอมเมนต์',
     },
     {
       step: 4,
       title: 'ผู้อำนวยการลงนาม e-Signature & ประทับตรา',
-      period: '26 - 28 ต.ค. 2569',
+      period: 'กำหนดตามผลการตรวจ',
       status: 'UPCOMING',
       desc: 'สร้าง Digital Certificate Hash (SHA-256) และ Final Lock',
     },
     {
       step: 5,
       title: 'จัดเก็บเข้าคลัง ปพ.5 กลางถาวรและส่ง สพป.สิงห์บุรี',
-      period: '31 ต.ค. 2569',
+      period: 'กำหนดตามผลการตรวจ',
       status: 'UPCOMING',
-      desc: 'จัดเก็บเข้าโฟลเดอร์ Google Drive รวมองค์กรถาวร และออกรายงานความสมบูรณ์ 100% รายชั้นส่ง สพป.สิงห์บุรี',
+      desc: 'จัดเก็บไฟล์ในคลัง PP5 และดาวน์โหลด ZIP เพื่อส่งต่องานทะเบียน',
     },
   ];
 
-  const handleExtendSubmit = (e: React.FormEvent) => {
+  const handleExtendSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    extendDeadline(activeTerm.id, newDeadlineDate + ':00Z', officialReason, approverName);
+    if (
+      !(await extendDeadline(
+        activeTerm.id,
+        new Date(newDeadlineDate + ':00+07:00').toISOString(),
+        officialReason,
+        approverName,
+      ))
+    )
+      return;
     setSuccessMsg('ขยายเวลา Deadline สำเร็จ และบันทึกเข้าสู่ Audit Trail เรียบร้อยแล้ว!');
     setTimeout(() => setSuccessMsg(null), 4000);
   };
@@ -90,7 +98,9 @@ export const AdminCalendar: React.FC = () => {
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs">
         <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
           <Calendar className="w-4 h-4 text-blue-700" />
-          <span>ปฏิทินกำหนดการ 5 ขั้นตอน ประจำภาคเรียนที่ {activeTerm.semester}/{activeTerm.year}</span>
+          <span>
+            ปฏิทินกำหนดการ 5 ขั้นตอน ประจำภาคเรียนที่ {activeTerm.semester}/{activeTerm.year}
+          </span>
         </h3>
 
         <div className="space-y-3">
@@ -143,7 +153,8 @@ export const AdminCalendar: React.FC = () => {
           </h3>
         </div>
         <p className="text-xs text-slate-600 mb-4">
-          การขยายเวลาจะทำการบันทึกเป็นประวัติทางราชการ (Audit Trail) เพื่อการตรวจสอบความโปร่งใส ITA & PDPA
+          การขยายเวลาจะทำการบันทึกเป็นประวัติทางราชการ (Audit Trail) เพื่อการตรวจสอบความโปร่งใส ITA
+          & PDPA
         </p>
 
         <form onSubmit={handleExtendSubmit} className="space-y-4 text-xs">
@@ -196,7 +207,7 @@ export const AdminCalendar: React.FC = () => {
               required
               value={approverName}
               onChange={(e) => setApproverName(e.target.value)}
-              placeholder="เช่น ดร.วิรัตน์ ถนอมสิงห์ ผู้อำนวยการโรงเรียนบ้านคูเมือง"
+              placeholder="เช่น เลขที่คำสั่งหรือชื่อผู้อนุญาตอ้างอิง"
               className="w-full p-2.5 bg-white border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500"
             />
           </div>

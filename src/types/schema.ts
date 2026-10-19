@@ -78,6 +78,13 @@ export interface SubmissionVersion {
   validation_attendance_correct: boolean; // เวลาเรียนไม่ต่ำกว่า 80%
   validation_traits_correct: boolean; // คุณลักษณะอันพึงประสงค์ 8 ประการ
   validation_reading_analysis: boolean; // การประเมินการอ่าน คิดวิเคราะห์ และเขียน
+  findings?: Array<{
+    by: string;
+    at: string;
+    location: string;
+    comment: string;
+    issueType: string;
+  }>;
 }
 
 export interface OrganizationDriveConfig {
@@ -91,6 +98,7 @@ export interface OrganizationDriveConfig {
 export interface PP5Submission {
   id: string;
   course_id: string;
+  revision?: number;
   status: SubmissionStatus;
   current_version: number;
   average_gpa: number;
@@ -113,6 +121,7 @@ export interface AuditLog {
     | 'REVIEW_REJECTED'
     | 'DIRECTOR_APPROVED_LOCKED'
     | 'BATCH_SIGN_APPROVED'
+    | 'DEADLINE_CHANGED'
     | 'DEADLINE_EXTENDED'
     | 'EMERGENCY_UNLOCKED'
     | 'COURSE_MODIFIED'
@@ -121,7 +130,7 @@ export interface AuditLog {
     | 'ORGANIZATION_DRIVE_UPDATED';
   actor_id: string;
   actor_name: string;
-  role: UserRole;
+  role: UserRole | 'ไม่ระบุ';
   target_id: string;
   target_name: string;
   details: Record<string, any>;

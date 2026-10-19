@@ -187,7 +187,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           },
           {
             id: 'admin/archive',
-            label: 'คลัง ปพ.5 & ปลดล็อก 2FA',
+            label: 'คลัง ปพ.5 & ปลดล็อกด้วยรหัสผ่าน',
             icon: Archive,
           },
           {
@@ -204,13 +204,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const getRoleHeaderInfo = (role: UserRole) => {
     switch (role) {
       case 'TEACHER':
-        return { label: 'บทบาท: ครูผู้สอน', color: 'bg-blue-500/20 text-blue-300 border-blue-400/30' };
+        return {
+          label: 'บทบาท: ครูผู้สอน',
+          color: 'bg-blue-500/20 text-blue-300 border-blue-400/30',
+        };
       case 'REVIEWER':
-        return { label: 'บทบาท: ผู้ตรวจเอกสาร', color: 'bg-purple-500/20 text-purple-300 border-purple-400/30' };
+        return {
+          label: 'บทบาท: ผู้ตรวจเอกสาร',
+          color: 'bg-purple-500/20 text-purple-300 border-purple-400/30',
+        };
       case 'EXECUTIVE':
-        return { label: 'บทบาท: ผู้อำนวยการ', color: 'bg-amber-500/20 text-amber-300 border-amber-400/30' };
+        return {
+          label: 'บทบาท: ผู้อำนวยการ',
+          color: 'bg-amber-500/20 text-amber-300 border-amber-400/30',
+        };
       case 'ADMIN':
-        return { label: 'บทบาท: ผู้ดูแลระบบ', color: 'bg-slate-500/20 text-slate-300 border-slate-400/30' };
+        return {
+          label: 'บทบาท: ผู้ดูแลระบบ',
+          color: 'bg-slate-500/20 text-slate-300 border-slate-400/30',
+        };
     }
   };
 
@@ -280,7 +292,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Current Active Role Badge */}
         {isOpen && (
           <div className="px-4 py-2.5 bg-[#0e1d45] border-b border-blue-900/30 flex items-center justify-between">
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${roleInfo.color}`}>
+            <span
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${roleInfo.color}`}
+            >
               {roleInfo.label}
             </span>
 
@@ -334,11 +348,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           : 'text-blue-300/80 group-hover:text-white'
                       }`}
                     />
-                    {isOpen && (
-                      <span className="truncate flex-1 text-left">{item.label}</span>
-                    )}
+                    {isOpen && <span className="truncate flex-1 text-left">{item.label}</span>}
                     {isOpen && item.badgeCount && (
-                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold text-white ${item.badgeColor || 'bg-blue-600'}`}>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold text-white ${item.badgeColor || 'bg-blue-600'}`}
+                      >
                         {item.badgeCount}
                       </span>
                     )}
@@ -401,7 +415,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {/* Google Drive Organization Shared Folder Card - Admin Only */}
               {currentRole === 'ADMIN' && (
                 <a
-                  href={organizationDriveUrl}
+                  href={organizationDriveUrl || undefined}
+                  aria-disabled={!organizationDriveUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block p-2.5 rounded-xl bg-gradient-to-r from-emerald-950/70 to-teal-950/60 border border-emerald-500/30 hover:border-emerald-400 text-left transition-all group cursor-pointer shadow-xs"
@@ -452,7 +467,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="flex flex-col items-center gap-2">
               {currentRole === 'ADMIN' && (
                 <a
-                  href={organizationDriveUrl}
+                  href={organizationDriveUrl || undefined}
+                  aria-disabled={!organizationDriveUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-2 text-emerald-400 hover:text-white hover:bg-emerald-950/60 rounded-lg flex justify-center transition-colors cursor-pointer"

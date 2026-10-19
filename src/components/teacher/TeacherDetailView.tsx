@@ -32,6 +32,7 @@ export const TeacherDetailView: React.FC = () => {
     assignments,
     users,
     currentUser,
+    currentRole,
     setActiveView,
     submitRevision,
     activeTerm,
@@ -42,6 +43,8 @@ export const TeacherDetailView: React.FC = () => {
   const [showRevisionModal, setShowRevisionModal] = useState(false);
   const [showCertificateModal, setShowCertificateModal] = useState(false);
   const [revisionNotes, setRevisionNotes] = useState('');
+  const [revisionExcel, setRevisionExcel] = useState<File | null>(null);
+  const [revisionPdf, setRevisionPdf] = useState<File | null>(null);
   const [revDriveFileLink, setRevDriveFileLink] = useState('');
   const [isSubmittingRev, setIsSubmittingRev] = useState(false);
 
@@ -58,11 +61,11 @@ export const TeacherDetailView: React.FC = () => {
     mySubmissions[0] ||
     submissions[0];
 
-  const course = courses.find((c) => c.id === submission.course_id);
+  const course = courses.find((c) => c.id === submission?.course_id);
   const assignment = assignments.find((a) => a.course_id === course?.id);
   const reviewer = assignment ? users.find((u) => u.id === assignment.reviewer_id) : null;
 
-  if (!course) {
+  if (!course || !submission) {
     return (
       <div className="p-8 text-center text-slate-500 text-xs">
         ไม่พบข้อมูลเอกสาร กรุณากลับหน้าภาพรวม
@@ -76,20 +79,21 @@ export const TeacherDetailView: React.FC = () => {
   const autoRevExcelName = `ปพ5_${activeTerm.year}_${activeTerm.semester}_${cleanGrade}_${course.course_code}_${nextVerNumber}.xlsx`;
   const autoRevPdfName = `ปพ5_${activeTerm.year}_${activeTerm.semester}_${cleanGrade}_${course.course_code}_${nextVerNumber}.pdf`;
 
-  const handleConfirmRevision = (e: React.FormEvent) => {
+  const handleConfirmRevision = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!revisionExcel || !revisionPdf) return;
     setIsSubmittingRev(true);
-    setTimeout(() => {
-      submitRevision(
-        submission.id,
-        autoRevExcelName,
-        autoRevPdfName,
-        revisionNotes,
-        revDriveFileLink || organizationDriveUrl
-      );
-      setIsSubmittingRev(false);
+    const ex = new File([revisionExcel], autoRevExcelName, {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const pd = new File([revisionPdf], autoRevPdfName, { type: 'application/pdf' });
+    const ok = await submitRevision(submission.id, ex, pd, revisionNotes, revDriveFileLink);
+    setIsSubmittingRev(false);
+    if (ok) {
       setShowRevisionModal(false);
-    }, 600);
+      setRevisionExcel(null);
+      setRevisionPdf(null);
+    }
   };
 
   return (
@@ -97,15 +101,15 @@ export const TeacherDetailView: React.FC = () => {
       {/* Top back & actions bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <button
-          onClick={() => setActiveView('teacher/dashboard')}
+          onClick={() => setActiveView(`${currentRole.toLowerCase()}/dashboard`)}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>กลับหน้าภาพรวมครู</span>
+          <span>กลับหน้าภาพรวม</span>
         </button>
 
         <div className="flex items-center gap-2">
-          {submission.status === 'REJECTED_REVISION' && (
+          {submission.status === 'REJECTED_REVISION' && course.teacher_id === currentUser.id && (
             <button
               onClick={() => setShowRevisionModal(true)}
               className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-2 animate-pulse cursor-pointer"
@@ -163,7 +167,9 @@ export const TeacherDetailView: React.FC = () => {
             </span>
           </div>
           <div>
-            <span className="text-slate-400 block text-[11px]">ผู้ตรวจที่รับผิดชอบ (Four-Eyes):</span>
+            <span className="text-slate-400 block text-[11px]">
+              ผู้ตรวจที่รับผิดชอบ (Four-Eyes):
+            </span>
             <span className="font-bold text-slate-800">
               {reviewer ? reviewer.full_name : 'ไม่ระบุ'}
             </span>
@@ -171,69 +177,73 @@ export const TeacherDetailView: React.FC = () => {
           <div>
             <span className="text-slate-400 block text-[11px]">ส่งล่าสุดเมื่อ:</span>
             <span className="font-bold text-slate-800 font-mono">
-              {currentVer?.submitted_at ? new Date(currentVer.submitted_at).toLocaleDateString('th-TH') : '-'}
+              {currentVer?.submitted_at
+                ? new Date(currentVer.submitted_at).toLocaleDateString('th-TH')
+                : '-'}
             </span>
           </div>
           <div>
             <span className="text-slate-400 block text-[11px]">สถานะล็อกถาวร:</span>
-            <span className={`font-bold ${submission.status === 'FINAL_LOCKED' ? 'text-emerald-700' : 'text-slate-600'}`}>
-              {submission.status === 'FINAL_LOCKED' ? 'ล็อกถาวร (Locked)' : 'ยังไม่ล็อก (Editable Window)'}
+            <span
+              className={`font-bold ${submission.status === 'FINAL_LOCKED' ? 'text-emerald-700' : 'text-slate-600'}`}
+            >
+              {submission.status === 'FINAL_LOCKED'
+                ? 'ล็อกถาวร (Locked)'
+                : 'ยังไม่ล็อก (Editable Window)'}
             </span>
           </div>
         </div>
       </div>
 
       {/* Reviewer Feedback / Defect Alert if REJECTED */}
-      {submission.status === 'REJECTED_REVISION' && currentVer?.reviewer_notes && (
-        <div className="bg-rose-50 border-2 border-rose-200 rounded-xl p-5 shadow-xs">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-rose-100 text-rose-700 rounded-lg shrink-0 mt-0.5">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-bold text-rose-900">
-                  ข้อเสนอแนะและจุดบกพร่องที่ต้องแก้ไขจากผู้ตรวจ ({currentVer.version_number})
-                </h4>
-                <span className="text-xs text-rose-600 font-mono">
-                  โดย: {reviewer?.full_name || 'ผู้ตรวจเอกสาร'}
-                </span>
+      {submission.status === 'REJECTED_REVISION' &&
+        course.teacher_id === currentUser.id &&
+        currentVer?.reviewer_notes && (
+          <div className="bg-rose-50 border-2 border-rose-200 rounded-xl p-5 shadow-xs">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-rose-100 text-rose-700 rounded-lg shrink-0 mt-0.5">
+                <AlertTriangle className="w-5 h-5" />
               </div>
-
-              <div className="mt-2 p-3 bg-white rounded-lg border border-rose-200 text-xs text-slate-800 whitespace-pre-line leading-relaxed font-sans">
-                {currentVer.reviewer_notes}
-              </div>
-
-              {currentVer.annotated_file_name && (
-                <div className="mt-3 flex items-center gap-2 text-xs">
-                  <span className="text-rose-800 font-semibold">ไฟล์แนบข้อบกพร่องที่ไฮไลต์:</span>
-                  <a
-                    href="#download"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      alert(`จำลองการเปิดไฟล์ไฮไลต์จุดบกพร่อง: ${currentVer.annotated_file_name}`);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-rose-100/50 text-rose-700 rounded border border-rose-300 font-mono text-[11px] font-semibold transition-colors"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>{currentVer.annotated_file_name}</span>
-                  </a>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-rose-900">
+                    ข้อเสนอแนะและจุดบกพร่องที่ต้องแก้ไขจากผู้ตรวจ ({currentVer.version_number})
+                  </h4>
+                  <span className="text-xs text-rose-600 font-mono">
+                    โดย: {reviewer?.full_name || 'ผู้ตรวจเอกสาร'}
+                  </span>
                 </div>
-              )}
 
-              <div className="mt-4 flex justify-end">
-                <button
-                  onClick={() => setShowRevisionModal(true)}
-                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>แก้ไขข้อมูลและอัปโหลด {nextVerNumber} ทันที</span>
-                </button>
+                <div className="mt-2 p-3 bg-white rounded-lg border border-rose-200 text-xs text-slate-800 whitespace-pre-line leading-relaxed font-sans">
+                  {currentVer.reviewer_notes}
+                </div>
+
+                {currentVer.annotated_file_name && (
+                  <div className="mt-3 flex items-center gap-2 text-xs">
+                    <span className="text-rose-800 font-semibold">ไฟล์แนบข้อบกพร่องที่ไฮไลต์:</span>
+                    <a
+                      href={currentVer.annotated_file_url}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-rose-100/50 text-rose-700 rounded border border-rose-300 font-mono text-[11px] font-semibold transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>{currentVer.annotated_file_name}</span>
+                    </a>
+                  </div>
+                )}
+
+                <div className="mt-4 flex justify-end">
+                  <button
+                    onClick={() => setShowRevisionModal(true)}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>แก้ไขข้อมูลและอัปโหลด {nextVerNumber} ทันที</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* Direct File Inspection Center */}
       <div>
@@ -261,9 +271,7 @@ export const TeacherDetailView: React.FC = () => {
             <div
               key={ver.id}
               className={`p-4 rounded-xl border text-xs transition-colors ${
-                idx === 0
-                  ? 'bg-blue-50/40 border-blue-200'
-                  : 'bg-slate-50 border-slate-200'
+                idx === 0 ? 'bg-blue-50/40 border-blue-200' : 'bg-slate-50 border-slate-200'
               }`}
             >
               <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
@@ -327,12 +335,31 @@ export const TeacherDetailView: React.FC = () => {
               อัปโหลดไฟล์คู่ชุดใหม่ที่ได้แก้ไขจุดบกพร่องตามที่ผู้ตรวจระบุเรียบร้อยแล้ว
             </p>
 
+            <label className="block text-xs font-bold">
+              เลือก Excel ฉบับแก้ไข
+              <input
+                aria-label="Excel ฉบับแก้ไข"
+                type="file"
+                accept=".xlsx"
+                onChange={(e) => setRevisionExcel(e.target.files?.[0] || null)}
+                className="block mt-2"
+              />
+            </label>
+            <label className="block text-xs font-bold">
+              เลือก PDF ฉบับแก้ไข
+              <input
+                aria-label="PDF ฉบับแก้ไข"
+                type="file"
+                accept=".pdf"
+                onChange={(e) => setRevisionPdf(e.target.files?.[0] || null)}
+                className="block mt-2"
+              />
+            </label>
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs space-y-1 font-mono">
               <div className="font-semibold text-blue-900 font-sans">ชื่อไฟล์ที่ตั้งอัตโนมัติ:</div>
               <div className="text-emerald-800">· {autoRevExcelName}</div>
               <div className="text-red-800">· {autoRevPdfName}</div>
             </div>
-
 
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">
@@ -358,7 +385,7 @@ export const TeacherDetailView: React.FC = () => {
               <button
                 type="button"
                 onClick={handleConfirmRevision}
-                disabled={isSubmittingRev}
+                disabled={isSubmittingRev || !revisionExcel || !revisionPdf}
                 className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-xs flex items-center gap-2 cursor-pointer"
               >
                 <Upload className="w-4 h-4" />

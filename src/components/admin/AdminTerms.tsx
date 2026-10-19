@@ -1,28 +1,20 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { AcademicTerm } from '../../types/schema';
-import {
-  Calendar,
-  Plus,
-  CheckCircle2,
-  Archive,
-  Clock,
-  Check,
-  AlertCircle,
-} from 'lucide-react';
+import { Calendar, Plus, CheckCircle2, Archive, Clock, Check, AlertCircle } from 'lucide-react';
 
 export const AdminTerms: React.FC = () => {
-  const { academicTerms, activeTerm, setActiveTermId, addAuditLog } = useApp();
+  const { academicTerms, activeTerm, setActiveTermId, addAuditLog, addTerm, mutate } = useApp();
 
   const [showAddTermModal, setShowAddTermModal] = useState(false);
-  const [year, setYear] = useState(2570);
+  const [year, setYear] = useState(new Date().getFullYear() + 543);
   const [semester, setSemester] = useState(1);
-  const [submissionDeadline, setSubmissionDeadline] = useState('2027-10-15T23:59');
-  const [reviewDeadline, setReviewDeadline] = useState('2027-10-22T23:59');
+  const [submissionDeadline, setSubmissionDeadline] = useState('');
+  const [reviewDeadline, setReviewDeadline] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
 
-  const handleActivateTerm = (id: string) => {
-    setActiveTermId(id);
+  const handleActivateTerm = async (id: string) => {
+    if (!(await setActiveTermId(id))) return;
     const target = academicTerms.find((t) => t.id === id);
     if (target) {
       addAuditLog({
@@ -31,7 +23,9 @@ export const AdminTerms: React.FC = () => {
         target_name: `เปลี่ยนปีการศึกษาเปิดใช้งานเป็น ${target.year} ภาคเรียนที่ ${target.semester}`,
         details: { active_term_id: id },
       });
-      setNotice(`เปิดใช้งานปีการศึกษา ${target.year} ภาคเรียนที่ ${target.semester} เป็นภาคเรียนปัจจุบันเรียบร้อยแล้ว`);
+      setNotice(
+        `เปิดใช้งานปีการศึกษา ${target.year} ภาคเรียนที่ ${target.semester} เป็นภาคเรียนปัจจุบันเรียบร้อยแล้ว`,
+      );
       setTimeout(() => setNotice(null), 3000);
     }
   };
@@ -98,9 +92,7 @@ export const AdminTerms: React.FC = () => {
               </div>
 
               <div className="mt-4">
-                <h3 className="text-lg font-bold text-slate-900">
-                  ปีการศึกษา {term.year}
-                </h3>
+                <h3 className="text-lg font-bold text-slate-900">ปีการศึกษา {term.year}</h3>
                 <p className="text-xs text-blue-900 font-semibold mt-0.5">
                   ภาคเรียนที่ {term.semester}
                 </p>
@@ -128,6 +120,16 @@ export const AdminTerms: React.FC = () => {
               </div>
 
               <div className="mt-5 pt-2">
+                {!isActive && (
+                  <button
+                    onClick={() =>
+                      void mutate('term-edit', { id: term.id, archived: !term.is_archived })
+                    }
+                    className="w-full mb-2 py-2 border rounded-lg text-xs text-slate-600"
+                  >
+                    {term.is_archived ? 'นำภาคเรียนออกจากการจัดเก็บ' : 'จัดเก็บภาคเรียนเข้าคลัง'}
+                  </button>
+                )}
                 {!isActive ? (
                   <button
                     onClick={() => handleActivateTerm(term.id)}
@@ -152,7 +154,12 @@ export const AdminTerms: React.FC = () => {
           <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h4 className="text-base font-bold text-slate-900">เปิดรอบปีการศึกษาใหม่</h4>
-              <button onClick={() => setShowAddTermModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+              <button
+                onClick={() => setShowAddTermModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
             </div>
 
             <div className="space-y-3 text-xs">
@@ -208,7 +215,20 @@ export const AdminTerms: React.FC = () => {
                   ยกเลิก
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
+                    if (!submissionDeadline || !reviewDeadline) {
+                      setNotice('กรุณาระบุกำหนดส่งและกำหนดตรวจให้ครบ');
+                      return;
+                    }
+                    if (
+                      !(await addTerm({
+                        year: Number(year),
+                        semester: Number(semester),
+                        deadline: new Date(submissionDeadline + ':00+07:00').toISOString(),
+                        reviewDeadline: new Date(reviewDeadline + ':00+07:00').toISOString(),
+                      }))
+                    )
+                      return;
                     setShowAddTermModal(false);
                     setNotice(`สร้างรอบปีการศึกษา ${year}/${semester} สำเร็จ!`);
                     setTimeout(() => setNotice(null), 3000);
