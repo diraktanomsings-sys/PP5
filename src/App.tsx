@@ -187,7 +187,7 @@ const MainAppLayout: React.FC = () => {
           {error && (
             <div
               role="alert"
-              className="mb-4 rounded-xl border border-red-200 bg-red-50 text-red-900 p-4 flex justify-between gap-3"
+              className="fixed z-[100] top-20 left-4 right-4 sm:left-auto sm:right-6 max-w-xl rounded-xl border border-red-300 bg-red-50 text-red-900 p-4 shadow-xl flex justify-between gap-3"
             >
               <span>{error}</span>
               <button aria-label="ปิดข้อความผิดพลาด" onClick={() => setError('')}>
