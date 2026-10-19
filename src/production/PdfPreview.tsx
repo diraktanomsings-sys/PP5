@@ -4,31 +4,44 @@ import {
   GlobalWorkerOptions,
   type PDFDocumentProxy,
   type RenderTask,
+  type PDFDocumentLoadingTask,
 } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { LoadingOverlay } from '../components/common/LoadingOverlay';
 GlobalWorkerOptions.workerSrc = workerUrl;
-export default function PdfPreview({ url }: { url: string }) {
+export default function PdfPreview({
+  url,
+  readDocument,
+}: {
+  url: string;
+  readDocument?: (url: string) => Promise<Uint8Array>;
+}) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [doc, setDoc] = useState<PDFDocumentProxy>();
   const [page, setPage] = useState(1);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
     setDoc(undefined);
     setError('');
     setLoading(true);
     setPage(1);
-    const task = getDocument({
-      url,
-      withCredentials: true,
-      enableXfa: false,
-      maxImageSize: 16_000_000,
-    });
-    task.promise
+    let task: PDFDocumentLoadingTask | undefined;
+    const open = async () => {
+      const bytes = readDocument ? await readDocument(url) : undefined;
+      if (!active) return;
+      task = getDocument({
+        ...(bytes ? { data: bytes } : { url, withCredentials: true }),
+        enableXfa: false,
+        maxImageSize: 16_000_000,
+      });
+      return task.promise;
+    };
+    void open()
       .then((pdf) => {
-        if (active) setDoc(pdf);
+        if (active && pdf) setDoc(pdf);
       })
       .catch(() => {
         if (active) {
@@ -38,9 +51,9 @@ export default function PdfPreview({ url }: { url: string }) {
       });
     return () => {
       active = false;
-      void task.destroy();
+      void task?.destroy();
     };
-  }, [url]);
+  }, [url, readDocument, attempt]);
   useEffect(() => {
     if (!doc) return;
     let active = true;
@@ -76,11 +89,20 @@ export default function PdfPreview({ url }: { url: string }) {
   return (
     <div className="pdf-reader">
       {error && (
-        <p role="alert" className="alert error">
-          {error}
-        </p>
+        <div
+          role="alert"
+          className="text-sm text-red-800 p-3 rounded-xl bg-red-50 border border-red-200"
+        >
+          <p>{error}</p>
+          <button
+            onClick={() => setAttempt((n) => n + 1)}
+            className="mt-2 px-3 py-2 bg-white border rounded-lg font-semibold"
+          >
+            ลองเปิด PDF อีกครั้ง
+          </button>
+        </div>
       )}
-      {loading && <LoadingOverlay message="กำลังอ่านไฟล์ PDF…" />}
+      {loading && <LoadingOverlay inline message="กำลังอ่านไฟล์ PDF…" />}
       <div className="actions">
         <button disabled={!doc || page === 1 || loading} onClick={() => setPage((p) => p - 1)}>
           หน้าก่อน

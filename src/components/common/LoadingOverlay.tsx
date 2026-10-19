@@ -1,9 +1,16 @@
 import { useEffect, useRef } from 'react';
 import { LoaderCircle } from 'lucide-react';
 
-export function LoadingOverlay({ message = 'กำลังโหลดข้อมูล…' }: { message?: string }) {
+export function LoadingOverlay({
+  message = 'กำลังโหลดข้อมูล…',
+  inline = false,
+}: {
+  message?: string;
+  inline?: boolean;
+}) {
   const status = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    if (inline) return;
     const previous = document.activeElement as HTMLElement | null;
     status.current?.focus({ preventScroll: true });
     const keepFocus = (event: KeyboardEvent) => {
@@ -17,9 +24,15 @@ export function LoadingOverlay({ message = 'กำลังโหลดข้อ
       document.removeEventListener('keydown', keepFocus);
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
-  }, []);
+  }, [inline]);
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/45 backdrop-blur-xs p-4 cursor-wait">
+    <div
+      className={
+        inline
+          ? 'flex items-center justify-center rounded-2xl bg-blue-50/60 p-4 my-3'
+          : 'fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/45 backdrop-blur-xs p-4 cursor-wait'
+      }
+    >
       <div
         ref={status}
         tabIndex={-1}
