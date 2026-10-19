@@ -8,6 +8,7 @@ import { Service, MAX_FILE, verifyFileBytes } from './service.js';
 import type { Role } from '../src/production/types.js';
 import type { ObjectStorage } from './storage.js';
 import { ApiError, requireThat } from './security.js';
+import { signedPdf } from './signed-pdf.js';
 
 const COOKIE = 'pp5_session';
 function token(req: Request) {
@@ -64,11 +65,43 @@ export function createHttp(service: Service, storage: ObjectStorage, origin: str
       if (req.method === 'GET') {
         if (action === 'health') {
           const s = await service.store.read();
-          res.json({ ready: true, initialized: s.users.length > 0 });
+          res.json({
+            ready: true,
+            initialized: s.users.length > 0,
+            schoolLogo: s.settings?.schoolLogo || '',
+          });
           return;
         }
         if (action === 'state') {
           res.json(await service.snapshot(token(req), role(req)));
+          return;
+        }
+        if (action === 'signed') {
+          const state = await service.snapshot(token(req), role(req));
+          const sub = state.submissions.find((s) => s.id === req.query.id);
+          requireThat(
+            sub?.status === 'FINAL_LOCKED' && sub.approval,
+            404,
+            'ไม่พบเอกสารที่อนุมัติหรือไม่มีสิทธิ์',
+          );
+          const c = state.courses.find((c) => c.id === sub.courseId)!;
+          const f = await service.accessibleFile(
+            token(req),
+            role(req),
+            sub.versions.at(-1)!.pdf.id,
+          );
+          const bytes = await signedPdf(
+            await storage.bytes(f),
+            sub,
+            c,
+            state.people.find((p) => p.id === sub.approval!.by)?.name || sub.approval.by,
+            state.settings,
+          );
+          res.set({
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': disposition('อนุมัติ_' + f.name),
+          });
+          await pipeline(Readable.from([Buffer.from(bytes)]), res);
           return;
         }
         if (action === 'file') {
@@ -89,7 +122,17 @@ export function createHttp(service: Service, storage: ObjectStorage, origin: str
             (s) =>
               s.status === 'FINAL_LOCKED' &&
               (!req.query.termId ||
-                state.courses.find((c) => c.id === s.courseId)?.termId === req.query.termId),
+                state.courses.find((c) => c.id === s.courseId)?.termId === req.query.termId) &&
+              (!req.query.year ||
+                String(
+                  state.terms.find(
+                    (t) => t.id === state.courses.find((c) => c.id === s.courseId)?.termId,
+                  )?.year,
+                ) === req.query.year) &&
+              (!req.query.grade ||
+                state.courses
+                  .find((c) => c.id === s.courseId)
+                  ?.grade.startsWith(String(req.query.grade))),
           );
           requireThat(subs.length, 404, 'ไม่มีเอกสารที่อนุมัติแล้ว');
           const files = subs.flatMap((s) => [s.versions.at(-1)!.excel, s.versions.at(-1)!.pdf]);
@@ -107,6 +150,10 @@ export function createHttp(service: Service, storage: ObjectStorage, origin: str
                 await service.accessibleFile(token(req), role(req), f.id),
               );
             entries[`${prefix}/approval.json`] = Buffer.from(JSON.stringify(sub.approval, null, 2));
+            if (sub.approvalHistory?.length)
+              entries[`${prefix}/approval-history.json`] = Buffer.from(
+                JSON.stringify(sub.approvalHistory, null, 2),
+              );
           }
           res.set({
             'Content-Type': 'application/zip',
@@ -192,7 +239,10 @@ export function createHttp(service: Service, storage: ObjectStorage, origin: str
       }
       if (action === 'submit') await service.submit(token(req), role(req), req.body);
       else if (action === 'review') await service.review(token(req), role(req), req.body);
+      else if (action === 'finding') await service.finding(token(req), role(req), req.body);
       else if (action === 'approve') await service.approve(token(req), role(req), req.body);
+      else if (action === 'approve-batch')
+        await service.approveBatch(token(req), role(req), req.body);
       else if (action === 'user') await service.createUser(token(req), role(req), req.body);
       else await service.configure(token(req), role(req), action, req.body);
       res.json({ ok: true });

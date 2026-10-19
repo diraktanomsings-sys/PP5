@@ -18,6 +18,9 @@ import {
   sameSecret,
 } from './security.js';
 import { unzipSync } from 'fflate';
+import { adminActions, adminCommand, courseData, driveUrl } from './admin.js';
+import { DOMParser } from '@xmldom/xmldom';
+import { readWorkbook, workbookMetrics } from '../src/lib/workbook.js';
 export const MAX_FILE = 25 * 1024 * 1024;
 export function verifyFileBytes(file: StoredFile, bytes: Uint8Array) {
   requireThat(
@@ -101,7 +104,18 @@ export class Service {
       actorName: user.name,
       action,
       target,
-      details,
+      details: {
+        ...details,
+        ...(/^(SUBMISSION_CREATED|REVISION_SUBMITTED)$/.test(action)
+          ? { role: 'TEACHER' }
+          : /^(REVIEW_PASSED|REVIEW_REJECTED|FINDING_ADDED)$/.test(action)
+            ? { role: 'REVIEWER' }
+            : action === 'DIRECTOR_APPROVED_LOCKED'
+              ? { role: 'EXECUTIVE' }
+              : !['LOGIN', 'LOGOUT', 'PASSWORD_CHANGED'].includes(action)
+                ? { role: 'ADMIN' }
+                : {}),
+      },
     });
   }
   session(state: State, user: Person) {
@@ -162,7 +176,10 @@ export class Service {
         s.attempts[attemptKey] = a;
       }
       return s.users.find(
-        (u) => u.email.toLowerCase() === identifier || u.teacherId.toLowerCase() === identifier,
+        (u) =>
+          u.email.toLowerCase() === identifier ||
+          u.teacherId.toLowerCase() === identifier ||
+          u.citizenId === identifier,
       );
     });
     const valid = await checkPassword(body.password, user?.passwordHash || 'scrypt:dummy:');
@@ -219,13 +236,16 @@ export class Service {
       user: publicUser(user),
       role,
       storage: this.storage,
+      settings: s.settings || {},
       terms: s.terms,
       courses,
       people: s.users
         .filter((u) => role === 'ADMIN' || peopleIds.has(u.id))
         .map((u) => {
           const p = publicUser(u);
-          return role === 'ADMIN' || u.id === user.id ? p : { ...p, email: '', teacherId: '' };
+          return role === 'ADMIN' || u.id === user.id
+            ? p
+            : { ...p, email: '', teacherId: '', citizenId: '' };
         }),
       submissions,
       audit: role === 'ADMIN' ? s.audit.slice(-200).reverse() : [],
@@ -235,6 +255,12 @@ export class Service {
     const name = text(body.name, 'ชื่อ');
     const email = text(body.email, 'อีเมล').toLowerCase();
     const teacherId = text(body.teacherId, 'รหัสบุคลากร', 50);
+    const citizenId = typeof body.citizenId === 'string' ? body.citizenId.trim() : '';
+    requireThat(
+      !citizenId || /^\d{13}$/.test(citizenId),
+      400,
+      'เลขประจำตัวต้องมี 13 หลักหรือเว้นว่าง',
+    );
     requireThat(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), 400, 'รูปแบบอีเมลไม่ถูกต้อง');
     requireThat(
       Array.isArray(body.roles) &&
@@ -249,7 +275,10 @@ export class Service {
       const admin = this.actor(s, token, role, ['ADMIN']);
       requireThat(
         !s.users.some(
-          (u) => u.email === email || u.teacherId.toLowerCase() === teacherId.toLowerCase(),
+          (u) =>
+            u.email === email ||
+            u.teacherId.toLowerCase() === teacherId.toLowerCase() ||
+            (citizenId && u.citizenId === citizenId),
         ),
         409,
         'อีเมลหรือรหัสบุคลากรนี้มีอยู่แล้ว',
@@ -262,6 +291,9 @@ export class Service {
         roles: [...new Set(body.roles as Role[])],
         active: true,
         passwordHash,
+        department: typeof body.department === 'string' ? body.department.slice(0, 200) : '',
+        citizenId,
+        createdAt: now(),
       };
       s.users.push(user);
       this.log(s, admin, 'USER_CREATED', user.id, { roles: user.roles });
@@ -289,6 +321,7 @@ export class Service {
     });
   }
   async configure(token: string, role: Role, action: string, body: any) {
+    if (adminActions.has(action)) return adminCommand(this, token, role, action, body);
     await this.store.write((s) => {
       const admin = this.actor(s, token, role, ['ADMIN']);
       if (action === 'term') {
@@ -319,23 +352,19 @@ export class Service {
           semester: body.semester,
           deadline: new Date(body.deadline).toISOString(),
           active: true,
+          reviewDeadline:
+            body.reviewDeadline && Number.isFinite(Date.parse(body.reviewDeadline))
+              ? new Date(body.reviewDeadline).toISOString()
+              : new Date(body.deadline).toISOString(),
+          archived: false,
+          createdAt: now(),
         };
         s.terms.push(term);
         this.log(s, admin, 'TERM_CREATED', term.id);
       } else if (action === 'course') {
         const term = s.terms.find((t) => t.id === body.termId);
         requireThat(term, 400, 'ไม่พบภาคเรียน');
-        const teacher = s.users.find(
-          (u) => u.id === body.teacherId && u.active && u.roles.includes('TEACHER'),
-        );
-        const reviewer = s.users.find(
-          (u) => u.id === body.reviewerId && u.active && u.roles.includes('REVIEWER'),
-        );
-        requireThat(
-          teacher && reviewer && teacher.id !== reviewer.id,
-          400,
-          'เลือกครูและผู้ตรวจคนละคนตามสิทธิ์',
-        );
+        const data = courseData(s, body);
         const code = text(body.code, 'รหัสวิชา', 50);
         const grade = text(body.grade, 'ชั้น/ห้อง', 50);
         requireThat(
@@ -345,12 +374,8 @@ export class Service {
         );
         const course = {
           id: id(),
-          termId: term.id,
-          code,
-          grade,
-          name: text(body.name, 'ชื่อวิชา'),
-          teacherId: teacher.id,
-          reviewerId: reviewer.id,
+          ...data,
+          createdAt: now(),
           open: true,
         };
         s.courses.push(course);
@@ -363,6 +388,7 @@ export class Service {
         this.log(s, admin, 'DEADLINE_CHANGED', term.id, {
           reason: text(body.reason, 'เหตุผล'),
           deadline: term.deadline,
+          reference: typeof body.reference === 'string' ? body.reference.slice(0, 200) : '',
         });
       } else if (action === 'course-open') {
         const c = s.courses.find((c) => c.id === body.id);
@@ -402,8 +428,24 @@ export class Service {
   }
   async reserve(token: string, role: Role, body: any) {
     return this.store.write((s) => {
-      const user = this.actor(s, token, role, ['TEACHER']);
-      this.submissionCourse(s, user, body.courseId);
+      const user = this.actor(
+        s,
+        token,
+        role,
+        body.purpose === 'annotation' ? ['REVIEWER'] : ['TEACHER'],
+      );
+      if (body.purpose === 'annotation') {
+        const c = s.courses.find((c) => c.id === body.courseId);
+        requireThat(
+          user.roles.includes('REVIEWER') &&
+            c?.reviewerId === user.id &&
+            c.teacherId !== user.id &&
+            body.kind === 'pdf' &&
+            s.submissions.some((sub) => sub.courseId === c.id && sub.status === 'PENDING_REVIEW'),
+          403,
+          'อัปโหลดคำอธิบายได้เฉพาะเอกสารที่คุณกำลังตรวจ',
+        );
+      } else this.submissionCourse(s, user, body.courseId);
       requireThat(body.kind === 'pdf' || body.kind === 'excel', 400, 'ประเภทไฟล์ไม่ถูกต้อง');
       const name = text(body.name, 'ชื่อไฟล์', 180).replace(/[\\/\u0000-\u001f]/g, '_');
       const extension = name.toLowerCase().split('.').pop();
@@ -433,6 +475,7 @@ export class Service {
         ready: false,
         used: false,
         expiresAt: Date.now() + 30 * 60_000,
+        purpose: body.purpose === 'annotation' ? 'annotation' : undefined,
       };
       file.pathname = `pp5/${user.id}/${file.id}.${extension}`;
       s.files[file.id] = file;
@@ -444,7 +487,7 @@ export class Service {
     const user = this.identity(s, token);
     const f = s.files[fileId];
     requireThat(
-      user.roles.includes('TEACHER') &&
+      (user.roles.includes('TEACHER') || user.roles.includes('REVIEWER')) &&
         f &&
         f.ownerId === user.id &&
         !f.used &&
@@ -458,6 +501,23 @@ export class Service {
     const f = await this.pendingFile(token, fileId);
     verifyFileBytes(f, bytes);
     const sha256 = digest(bytes);
+    let metrics: Version['metrics'];
+    if (f.kind === 'excel') {
+      try {
+        metrics = workbookMetrics(
+          readWorkbook(
+            bytes,
+            new DOMParser({
+              onError: () => {
+                throw new Error('InvalidXML');
+              },
+            }),
+          ),
+        );
+      } catch {
+        requireThat(false, 400, 'โครงสร้างข้อมูล Excel ไม่ถูกต้องหรือมีขนาดขยายเกินกำหนด');
+      }
+    }
     await this.store.write((s) => {
       const u = this.identity(s, token);
       const file = s.files[fileId];
@@ -468,6 +528,7 @@ export class Service {
       );
       file.sha256 = sha256;
       file.ready = true;
+      file.metrics = metrics;
     });
     return { id: f.id, name: f.name, kind: f.kind, size: f.size, sha256 };
   }
@@ -487,6 +548,7 @@ export class Service {
             file.ownerId === user.id &&
             file.courseId === course.id &&
             file.kind === kind &&
+            !file.purpose &&
             file.ready &&
             !file.used &&
             file.expiresAt > Date.now(),
@@ -519,6 +581,8 @@ export class Service {
         submittedBy: user.id,
         submittedAt: now(),
         notes: typeof body.notes === 'string' ? body.notes.slice(0, 4000) : '',
+        driveUrl: driveUrl(body.driveUrl),
+        metrics: excel.metrics,
       };
       excel.used = true;
       pdf.used = true;
@@ -559,12 +623,31 @@ export class Service {
       );
       requireThat(!body.pass || body.checks.every(Boolean), 400, 'รับรองได้เมื่อผ่านทั้ง 4 ด้าน');
       const notes = text(body.notes, 'ผลตรวจหรือเหตุผล', 4000);
+      let annotated;
+      if (body.annotatedId) {
+        const f = s.files[body.annotatedId];
+        requireThat(
+          f &&
+            f.ownerId === user.id &&
+            f.courseId === c.id &&
+            f.purpose === 'annotation' &&
+            f.kind === 'pdf' &&
+            f.ready &&
+            !f.used &&
+            f.expiresAt > Date.now(),
+          400,
+          'ไฟล์แนบผลตรวจไม่ถูกต้อง',
+        );
+        f.used = true;
+        annotated = { id: f.id, name: f.name, kind: f.kind, size: f.size, sha256: f.sha256 };
+      }
       sub.versions.at(-1)!.review = {
         by: user.id,
         at: now(),
         pass: body.pass,
         notes,
         checks: body.checks,
+        annotated,
       };
       sub.status = body.pass ? 'PENDING_DIRECTOR' : 'REJECTED_REVISION';
       sub.revision++;
@@ -574,64 +657,120 @@ export class Service {
       });
     });
   }
-  async approve(token: string, role: Role, body: any) {
+  async finding(token: string, role: Role, body: any) {
     await this.store.write((s) => {
-      const user = this.actor(s, token, role, ['EXECUTIVE']);
-      const sub = s.submissions.find((sub) => sub.id === body.id);
+      const user = this.actor(s, token, role, ['REVIEWER']);
+      const sub = s.submissions.find((v) => v.id === body.id);
       const c = s.courses.find((c) => c.id === sub?.courseId);
       requireThat(
-        sub && c && c.teacherId !== user.id && c.reviewerId !== user.id,
+        sub && c && c.reviewerId === user.id && c.teacherId !== user.id,
         403,
-        'ผู้อนุมัติต้องเป็นคนละคนกับผู้สอนและผู้ตรวจ',
+        'คุณไม่ได้รับมอบหมายให้ตรวจรายการนี้',
       );
       requireThat(
-        sub.status === 'PENDING_DIRECTOR' && sub.revision === body.expectedRevision,
+        sub.status === 'PENDING_REVIEW' && sub.revision === body.expectedRevision,
         409,
-        'รายการไม่อยู่ในสถานะรออนุมัติหรือเปลี่ยนแปลงแล้ว',
-      );
-      requireThat(body.confirmed === true, 400, 'กรุณายืนยันการอนุมัติเอกสาร');
-      requireThat(
-        typeof body.signature === 'string' &&
-          /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(body.signature) &&
-          body.signature.length >= 100 &&
-          body.signature.length <= 200_000,
-        400,
-        'กรุณาลงลายมือชื่อ',
+        'สถานะเปลี่ยนแปลงแล้ว กรุณารีเฟรช',
       );
       const version = sub.versions.at(-1)!;
-      requireThat(version.review?.pass, 409, 'เอกสารยังไม่ผ่านการตรวจ');
-      const at = now();
-      const manifest = JSON.stringify({
-        submissionId: sub.id,
-        version: version.number,
-        excel: version.excel.sha256,
-        pdf: version.pdf.sha256,
+      version.findings ||= [];
+      requireThat(
+        version.findings.length < 100,
+        400,
+        'บันทึกข้อค้นพบได้ไม่เกิน 100 รายการต่อเวอร์ชัน',
+      );
+      const finding = {
         by: user.id,
-        at,
-        signature: digest(body.signature),
-      });
-      sub.approval = {
-        by: user.id,
-        at,
-        signature: body.signature,
-        manifest,
-        manifestHash: digest(manifest),
-        pdfHash: version.pdf.sha256,
-        excelHash: version.excel.sha256,
+        at: now(),
+        location: text(body.location, 'ตำแหน่ง', 300),
+        comment: text(body.comment, 'ข้อเสนอแนะ', 4000),
+        issueType: text(body.issueType, 'ประเภท', 50),
       };
-      sub.status = 'FINAL_LOCKED';
+      version.findings.push(finding);
       sub.revision++;
-      this.log(s, user, 'DIRECTOR_APPROVED_LOCKED', sub.id, {
-        manifestHash: sub.approval.manifestHash,
+      this.log(s, user, 'FINDING_ADDED', sub.id, {
         version: version.number,
+        location: finding.location,
       });
+    });
+  }
+  async approve(token: string, role: Role, body: any) {
+    await this.store.write((s) => this.approveInState(s, token, role, body));
+  }
+  async approveBatch(token: string, role: Role, body: any) {
+    requireThat(
+      Array.isArray(body.items) &&
+        body.items.length > 0 &&
+        body.items.length <= 100 &&
+        new Set(body.items.map((v: any) => v.id)).size === body.items.length,
+      400,
+      'เลือกรายการอนุมัติ 1–100 รายการ',
+    );
+    await this.store.write((s) => {
+      for (const item of body.items) this.approveInState(s, token, role, { ...body, ...item });
+    });
+  }
+  private approveInState(s: State, token: string, role: Role, body: any) {
+    const user = this.actor(s, token, role, ['EXECUTIVE']);
+    const sub = s.submissions.find((sub) => sub.id === body.id);
+    const c = s.courses.find((c) => c.id === sub?.courseId);
+    requireThat(
+      sub && c && c.teacherId !== user.id && sub.versions.at(-1)?.review?.by !== user.id,
+      403,
+      'ผู้อนุมัติต้องเป็นคนละคนกับผู้สอนและผู้ตรวจ',
+    );
+    requireThat(
+      sub.status === 'PENDING_DIRECTOR' && sub.revision === body.expectedRevision,
+      409,
+      'รายการไม่อยู่ในสถานะรออนุมัติหรือเปลี่ยนแปลงแล้ว',
+    );
+    requireThat(body.confirmed === true, 400, 'กรุณายืนยันการอนุมัติเอกสาร');
+    requireThat(
+      typeof body.signature === 'string' &&
+        /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(body.signature) &&
+        body.signature.length >= 100 &&
+        body.signature.length <= 200_000 &&
+        Buffer.from(body.signature.split(',')[1], 'base64')
+          .subarray(0, 8)
+          .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
+      400,
+      'กรุณาลงลายมือชื่อ',
+    );
+    const version = sub.versions.at(-1)!;
+    requireThat(version.review?.pass, 409, 'เอกสารยังไม่ผ่านการตรวจ');
+    const at = now();
+    const manifest = JSON.stringify({
+      submissionId: sub.id,
+      version: version.number,
+      excel: version.excel.sha256,
+      pdf: version.pdf.sha256,
+      by: user.id,
+      at,
+      signature: digest(body.signature),
+    });
+    sub.approval = {
+      by: user.id,
+      at,
+      signature: body.signature,
+      manifest,
+      manifestHash: digest(manifest),
+      pdfHash: version.pdf.sha256,
+      excelHash: version.excel.sha256,
+    };
+    sub.status = 'FINAL_LOCKED';
+    sub.revision++;
+    this.log(s, user, 'DIRECTOR_APPROVED_LOCKED', sub.id, {
+      manifestHash: sub.approval.manifestHash,
+      version: version.number,
     });
   }
   async accessibleFile(token: string, role: Role, fileId: string) {
     const s = await this.store.read();
     const user = this.actor(s, token, role);
     const sub = s.submissions.find((sub) =>
-      sub.versions.some((v) => v.excel.id === fileId || v.pdf.id === fileId),
+      sub.versions.some(
+        (v) => v.excel.id === fileId || v.pdf.id === fileId || v.review?.annotated?.id === fileId,
+      ),
     );
     requireThat(
       sub && this.visible(s, user, role, sub.courseId),
