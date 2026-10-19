@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 
 export function AdminDriveStorage() {
-  const { driveStorage, mutate, busy } = useApp();
+  const { driveStorage, mutate, busy, organizeDrive } = useApp();
   const [url, setUrl] = useState(driveStorage?.url || '');
   const [folderId, setFolderId] = useState(
     driveStorage?.folderId || '1_9hk4918HBD1wmy2vK92W83jzYsPbrh4',
@@ -22,6 +22,24 @@ export function AdminDriveStorage() {
           บัญชีตัวรับไฟล์: {driveStorage.ownerEmail} · ไฟล์ที่ส่งแล้วใน Drive{' '}
           {driveStorage.stored || 0} ไฟล์
         </p>
+      )}
+      {driveStorage?.enabled && (
+        <div className="rounded-lg bg-blue-50 p-3 space-y-2 text-xs text-blue-950">
+          <p>จัดเก็บตาม ปีการศึกษา / ภาคเรียน → ชั้นเรียน → วิชา ไฟล์ใหม่จะเข้าโฟลเดอร์อัตโนมัติ</p>
+          {!!driveStorage.unorganized?.length && (
+            <button
+              type="button"
+              disabled={busy}
+              className="rounded-lg bg-blue-900 px-3 py-2 text-white font-bold"
+              onClick={async () => {
+                if (await organizeDrive())
+                  setNotice('จัดโฟลเดอร์ไฟล์เดิมเรียบร้อย ลิงก์ไฟล์เดิมยังใช้งานได้');
+              }}
+            >
+              จัดโฟลเดอร์ไฟล์เดิม ({driveStorage.unorganized.length} ไฟล์)
+            </button>
+          )}
+        </div>
       )}
       <form
         className="space-y-3"

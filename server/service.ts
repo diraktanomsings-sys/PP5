@@ -263,6 +263,9 @@ export class Service {
                     .filter((f) => f.ready && f.used && !f.drive)
                     .map((f) => ({ id: f.id, name: f.name })),
                   stored: Object.values(s.files).filter((f) => f.used && f.drive).length,
+                  unorganized: Object.values(s.files)
+                    .filter((f) => f.ready && f.used && f.drive && !f.drive.layout)
+                    .map((f) => ({ id: f.id, name: f.name })),
                 }
               : {}),
           }
@@ -443,7 +446,16 @@ export class Service {
       } else requireThat(false, 404, 'ไม่พบคำสั่ง');
     });
   }
+  noCoursePurge(s: State, courseId: string) {
+    const sub = s.submissions.find((v) => v.courseId === courseId);
+    requireThat(
+      !s.purges?.[`course:${courseId}`] && (!sub || !s.purges?.[`submission:${sub.id}`]),
+      409,
+      'งานนี้กำลังลบ กรุณารอให้เสร็จ หรือกดลบอีกครั้งเพื่อดำเนินการต่อ',
+    );
+  }
   submissionCourse(s: State, user: Person, courseId: string) {
+    this.noCoursePurge(s, courseId);
     const c = s.courses.find((c) => c.id === courseId);
     requireThat(
       c &&
@@ -474,6 +486,7 @@ export class Service {
         role,
         body.purpose === 'annotation' ? ['REVIEWER'] : ['TEACHER'],
       );
+      this.noCoursePurge(s, body.courseId);
       if (body.purpose === 'annotation') {
         const c = s.courses.find((c) => c.id === body.courseId);
         requireThat(
@@ -536,6 +549,7 @@ export class Service {
       403,
       'ไม่พบไฟล์ที่คุณมีสิทธิ์อัปโหลด',
     );
+    this.noCoursePurge(s, f.courseId);
     return f;
   }
   async readyFile(
@@ -660,6 +674,7 @@ export class Service {
       const user = this.actor(s, token, role, ['REVIEWER']);
       const sub = s.submissions.find((sub) => sub.id === body.id);
       const c = s.courses.find((c) => c.id === sub?.courseId);
+      if (c) this.noCoursePurge(s, c.id);
       requireThat(
         sub && c && !c.deletedAt && c.reviewerId === user.id && c.teacherId !== user.id,
         403,
@@ -719,6 +734,7 @@ export class Service {
       const user = this.actor(s, token, role, ['REVIEWER']);
       const sub = s.submissions.find((v) => v.id === body.id);
       const c = s.courses.find((c) => c.id === sub?.courseId);
+      if (c) this.noCoursePurge(s, c.id);
       requireThat(
         sub && c && !c.deletedAt && c.reviewerId === user.id && c.teacherId !== user.id,
         403,
@@ -771,6 +787,7 @@ export class Service {
     const user = this.actor(s, token, role, ['EXECUTIVE']);
     const sub = s.submissions.find((sub) => sub.id === body.id);
     const c = s.courses.find((c) => c.id === sub?.courseId);
+    if (c) this.noCoursePurge(s, c.id);
     requireThat(
       sub &&
         c &&

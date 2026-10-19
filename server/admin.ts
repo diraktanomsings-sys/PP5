@@ -159,6 +159,7 @@ export async function adminCommand(
           if (session.userId === u.id) delete s.sessions[key];
       } else if (kind === 'course') {
         const c = s.courses.find((c) => c.id === item.id)!;
+        service.noCoursePurge(s, c.id);
         if (!remove)
           requireThat(
             s.terms.some((t) => t.id === c.termId && !t.deletedAt) &&
@@ -320,6 +321,7 @@ export async function adminCommand(
     } else if (action === 'course-edit') {
       const c = s.courses.find((c) => c.id === body.id);
       requireThat(c && !c.deletedAt, 404, 'ไม่พบรายวิชาที่ใช้งานอยู่');
+      service.noCoursePurge(s, c.id);
       const data = courseData(s, { ...c, ...body });
       requireThat(
         !s.submissions.some((sub) => sub.courseId === c.id) ||
@@ -387,6 +389,7 @@ export async function adminCommand(
       for (const a of body.assignments) {
         const c = s.courses.find((c) => c.id === a.courseId);
         requireThat(c && !c.deletedAt && !seen.has(c.id), 400, 'รายวิชาไม่ถูกต้องหรือถูกลบหรือซ้ำ');
+        service.noCoursePurge(s, c.id);
         seen.add(c.id);
         requireThat(
           s.users.some((u) => u.id === a.reviewerId && u.active && u.roles.includes('REVIEWER')) &&

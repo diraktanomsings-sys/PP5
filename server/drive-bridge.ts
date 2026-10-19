@@ -13,7 +13,8 @@ export interface DriveConfig {
   verifiedAt: string;
 }
 export interface DriveJob {
-  kind: 'probe' | 'write' | 'read' | 'delete';
+  kind: 'probe' | 'write' | 'read' | 'delete' | 'organize';
+  layout?: string[];
   folderId: string;
   fileId?: string;
   driveId?: string;
@@ -71,8 +72,10 @@ export class DriveBridge {
       size: job.size,
       sha256: job.sha256,
       driveId: job.driveId,
+      layout: job.layout,
     };
-    if (job.kind === 'read' || job.kind === 'delete') return { ...info, file };
+    if (job.kind === 'read' || job.kind === 'delete' || job.kind === 'organize')
+      return { ...info, file };
     const bytes = await this.source.bytes(f);
     requireThat(
       bytes.length === job.size && digest(bytes) === job.sha256,
@@ -219,7 +222,7 @@ export class DriveBridge {
       'ข้อมูลไฟล์ไม่ตรงกับต้นฉบับ',
     );
     const writeToken = opaqueToken();
-    await this.store.write((s) => {
+    const layout = await this.store.write((s) => {
       requireThat(
         !Object.values(s.purges || {}).some((p) => p.fileIds.includes(file.id)),
         409,
@@ -232,16 +235,22 @@ export class DriveBridge {
       );
       s.storageWrites ||= {};
       s.storageWrites[file.id] = { token: writeToken, expiresAt: Date.now() + 150000 };
+      return this.layout(s, file);
     });
     try {
       const r = await this.invoke(config, {
         kind: 'write',
+        layout,
         fileId: file.id,
         size: file.size,
         sha256: file.sha256,
       });
       requireThat(
-        idPattern.test(String(r.id)) && r.sha256 === file.sha256 && r.size === file.size,
+        idPattern.test(String(r.id)) &&
+          r.sha256 === file.sha256 &&
+          r.size === file.size &&
+          r.organized === true &&
+          idPattern.test(String(r.parentId)),
         409,
         'ไฟล์ Drive ไม่ตรงกับต้นฉบับ',
       );
@@ -250,6 +259,8 @@ export class DriveBridge {
         folderId: config.folderId,
         webViewLink: `https://drive.google.com/file/d/${r.id}/view`,
         copiedAt: new Date().toISOString(),
+        parentId: r.parentId as string,
+        layout,
       };
       // Save the pointer before releasing the storage lease, including an upload that later expires.
       await this.store.write((s) => {
@@ -284,6 +295,7 @@ export class DriveBridge {
         driveId: file.drive?.id,
         size: file.size,
         sha256: file.sha256,
+        layout: file.drive?.layout || this.layout(s, file),
       });
       requireThat(r.deleted === true && r.fileId === file.id, 409, 'Drive ยังไม่ได้ยืนยันลบไฟล์');
     }
@@ -337,6 +349,81 @@ export class DriveBridge {
       service.log(s, user, 'FILE_COPIED_TO_DRIVE', f.id, { sha256: f.sha256 });
     });
     // Keep the previous originals when migrating existing submitted documents.
+  }
+  private layout(s: import('./store.js').State, file: StoredFile) {
+    const c = s.courses.find((c) => c.id === file.courseId);
+    const t = s.terms.find((t) => t.id === c?.termId);
+    requireThat(c && t, 409, 'ไม่พบรายวิชาหรือภาคเรียนของไฟล์');
+    const safe = (v: string) =>
+      v
+        .replace(/[\\/\u0000-\u001f]/g, '-')
+        .trim()
+        .slice(0, 140) || 'ไม่ระบุ';
+    return [
+      `ปีการศึกษา ${t.year} ภาคเรียนที่ ${t.semester}`,
+      `ชั้น ${safe(c.grade)}`,
+      safe(`${c.code} ${c.name}`),
+    ];
+  }
+  async organize(service: Service, token: string, role: any, fileId: string) {
+    const s = await this.store.read();
+    service.actor(s, token, role, ['ADMIN']);
+    const f = s.files[fileId];
+    requireThat(
+      f?.ready && f.used && f.drive && s.driveConfig?.enabled,
+      409,
+      'ไม่พบไฟล์ที่ส่งแล้วใน Drive',
+    );
+    const layout = this.layout(s, f),
+      lease = opaqueToken();
+    await this.store.write((state) => {
+      service.actor(state, token, role, ['ADMIN']);
+      service.noCoursePurge(state, f.courseId);
+      requireThat(
+        !Object.values(state.purges || {}).some((p) => p.fileIds.includes(f.id)) &&
+          (state.storageWrites?.[f.id]?.expiresAt || 0) <= Date.now(),
+        409,
+        'ไฟล์กำลังบันทึกหรือลบอยู่',
+      );
+      state.storageWrites ||= {};
+      state.storageWrites[f.id] = { token: lease, expiresAt: Date.now() + 150000 };
+    });
+    try {
+      const r = await this.invoke(s.driveConfig!, {
+        kind: 'organize',
+        fileId: f.id,
+        driveId: f.drive!.id,
+        size: f.size,
+        sha256: f.sha256,
+        layout,
+      });
+      requireThat(
+        r.organized === true &&
+          r.id === f.drive!.id &&
+          r.sha256 === f.sha256 &&
+          r.size === f.size &&
+          idPattern.test(String(r.parentId)),
+        409,
+        'Drive ยังไม่ได้ยืนยันจัดโฟลเดอร์',
+      );
+      await this.store.write((state) => {
+        const current = state.files[f.id];
+        requireThat(current?.drive?.id === f.drive!.id, 409, 'ไฟล์เปลี่ยนแปลงแล้ว');
+        current.drive.parentId = r.parentId;
+        current.drive.layout = layout;
+        service.log(
+          state,
+          service.actor(state, token, role, ['ADMIN']),
+          'DRIVE_FILE_ORGANIZED',
+          f.id,
+          { layout },
+        );
+      });
+    } finally {
+      await this.store.write((state) => {
+        if (state.storageWrites?.[f.id]?.token === lease) delete state.storageWrites[f.id];
+      });
+    }
   }
   storage(): ObjectStorage {
     return {

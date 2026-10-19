@@ -5,7 +5,7 @@ import type { Role, PurgePreview } from '../src/production/types.js';
 import type { ObjectStorage } from './storage.js';
 import { digest, requireThat } from './security.js';
 
-export type PurgeKind = 'user' | 'course' | 'term';
+export type PurgeKind = 'user' | 'course' | 'term' | 'submission';
 export interface PurgeTask {
   kind: PurgeKind;
   targetId: string;
@@ -19,14 +19,29 @@ export interface PurgeTask {
 export const purgeKey = (kind: string, id: string) => `${kind}:${id}`;
 function plan(state: State, kind: PurgeKind, id: string): PurgePreview & { files: StoredFile[] } {
   requireThat(
-    ['user', 'course', 'term'].includes(kind) && typeof id === 'string',
+    ['user', 'course', 'term', 'submission'].includes(kind) && typeof id === 'string',
     400,
     'ประเภทรายการไม่ถูกต้อง',
   );
-  const item = (
-    kind === 'user' ? state.users : kind === 'course' ? state.courses : state.terms
-  ).find((v) => v.id === id);
-  requireThat(item?.deletedAt, 409, 'ย้ายรายการลงถังขยะก่อนลบถาวร');
+  const sub = kind === 'submission' ? state.submissions.find((s) => s.id === id) : undefined;
+  const course = state.courses.find((c) => c.id === sub?.courseId);
+  const item =
+    kind === 'submission'
+      ? sub
+      : (kind === 'user' ? state.users : kind === 'course' ? state.courses : state.terms).find(
+          (v) => v.id === id,
+        );
+  if (kind === 'submission') {
+    requireThat(sub && course && !course.deletedAt, 404, 'ไม่พบงานที่ส่ง');
+    requireThat(
+      ['PENDING_REVIEW', 'REJECTED_REVISION'].includes(sub.status) &&
+        !sub.approval &&
+        !sub.approvalHistory?.length,
+      409,
+      'งานที่ผ่านการตรวจหรือมีประวัติอนุมัติแล้ว ต้องให้ผู้ดูแลจัดการ',
+    );
+  } else
+    requireThat(item && 'deletedAt' in item && item.deletedAt, 409, 'ย้ายรายการลงถังขยะก่อนลบถาวร');
   if (kind === 'user') {
     requireThat(
       !state.courses.some((c) => c.teacherId === id || c.reviewerId === id),
@@ -55,13 +70,21 @@ function plan(state: State, kind: PurgeKind, id: string): PurgePreview & { files
     );
   const files = Object.values(state.files)
     .filter((f) =>
-      kind === 'course' ? f.courseId === id : kind === 'user' ? f.ownerId === id : false,
+      kind === 'submission'
+        ? f.courseId === course!.id &&
+          (f.used || f.ownerId === course!.teacherId || f.purpose === 'annotation')
+        : kind === 'course'
+          ? f.courseId === id
+          : kind === 'user'
+            ? f.ownerId === id
+            : false,
     )
     .sort((a, b) => a.id.localeCompare(b.id));
   const fileIds = new Set(files.map((f) => f.id));
   requireThat(
     !state.submissions.some(
       (s) =>
+        s.id !== sub?.id &&
         (kind !== 'course' || s.courseId !== id) &&
         s.versions.some((v) =>
           [v.excel.id, v.pdf.id, v.review?.annotated?.id].some((f) => f && fileIds.has(f)),
@@ -73,6 +96,15 @@ function plan(state: State, kind: PurgeKind, id: string): PurgePreview & { files
   const task = state.purges?.[purgeKey(kind, id)];
   if (!task) {
     requireThat(
+      !Object.values(state.purges || {}).some(
+        (p) =>
+          p.fileIds.some((id) => fileIds.has(id)) ||
+          (kind === 'submission' && p.kind === 'course' && p.targetId === course!.id),
+      ),
+      409,
+      'รายการนี้มีงานลบอื่นกำลังดำเนินการอยู่',
+    );
+    requireThat(
       !files.some((f) => !f.ready && f.expiresAt + 180000 > Date.now()),
       409,
       'มีไฟล์อัปโหลดค้าง กรุณารอให้การอัปโหลดเสร็จหรือหมดอายุก่อนลบถาวร',
@@ -83,14 +115,18 @@ function plan(state: State, kind: PurgeKind, id: string): PurgePreview & { files
       'มีไฟล์กำลังบันทึกหรือย้ายเข้า Drive กรุณาลองใหม่เมื่อเสร็จ',
     );
   }
-  const submissions = state.submissions.filter((s) => kind === 'course' && s.courseId === id);
-  const hash = digest(JSON.stringify({ kind, id, deletedAt: item.deletedAt, files, submissions }));
+  const submissions = state.submissions.filter((s) =>
+    kind === 'submission' ? s.id === id : kind === 'course' && s.courseId === id,
+  );
+  const hash = digest(JSON.stringify({ kind, id, item, files, submissions }));
   const label =
-    kind === 'user'
-      ? state.users.find((u) => u.id === id)!.name
-      : kind === 'course'
-        ? `${state.courses.find((c) => c.id === id)!.code} ${state.courses.find((c) => c.id === id)!.grade}`
-        : `${state.terms.find((t) => t.id === id)!.year}/${state.terms.find((t) => t.id === id)!.semester}`;
+    kind === 'submission'
+      ? `${course!.code} ${course!.name} ${course!.grade}`
+      : kind === 'user'
+        ? state.users.find((u) => u.id === id)!.name
+        : kind === 'course'
+          ? `${state.courses.find((c) => c.id === id)!.code} ${state.courses.find((c) => c.id === id)!.grade}`
+          : `${state.terms.find((t) => t.id === id)!.year}/${state.terms.find((t) => t.id === id)!.semester}`;
   return {
     kind,
     id,
@@ -105,6 +141,27 @@ function plan(state: State, kind: PurgeKind, id: string): PurgePreview & { files
     continuing: !!task,
   };
 }
+function authorize(
+  service: Service,
+  state: State,
+  token: string,
+  role: Role,
+  kind: PurgeKind,
+  id: string,
+) {
+  const user = service.actor(state, token, role, kind === 'submission' ? ['TEACHER'] : ['ADMIN']);
+  if (kind === 'submission') {
+    const sub = state.submissions.find((s) => s.id === id);
+    requireThat(
+      sub &&
+        state.courses.some((c) => c.id === sub.courseId && c.teacherId === user.id) &&
+        sub.versions.every((v) => v.submittedBy === user.id),
+      403,
+      'ลบได้เฉพาะ ปพ.5 ที่คุณส่งเอง',
+    );
+  }
+  return user;
+}
 export async function previewPurge(
   service: Service,
   token: string,
@@ -113,7 +170,7 @@ export async function previewPurge(
   id: string,
 ): Promise<PurgePreview> {
   const state = await service.store.read();
-  service.actor(state, token, role, ['ADMIN']);
+  authorize(service, state, token, role, kind, id);
   const { files, ...preview } = plan(state, kind, id);
   return preview;
 }
@@ -127,7 +184,7 @@ export async function purgeStep(
   const key = purgeKey(body.kind, body.id),
     lease = randomUUID();
   const task = await service.store.write((s) => {
-    const admin = service.actor(s, token, role, ['ADMIN']);
+    const admin = authorize(service, s, token, role, body.kind, body.id);
     requireThat(
       body.confirmed === true && body.confirmation === 'ลบถาวร',
       400,
@@ -172,9 +229,14 @@ export async function purgeStep(
       requireThat(job?.leaseToken === lease, 409, 'งานลบเปลี่ยนแปลง');
       if (job.removed.length < job.fileIds.length)
         return { done: false, removed: job.removed.length, total: job.fileIds.length };
-      const admin = service.actor(s, token, role, ['ADMIN']);
+      const admin = authorize(service, s, token, role, body.kind, body.id);
       const targetIds = new Set([job.targetId, ...job.fileIds]);
-      if (job.kind === 'course') {
+      if (job.kind === 'submission') {
+        const sub = s.submissions.find((sub) => sub.id === job.targetId)!;
+        const course = s.courses.find((c) => c.id === sub.courseId)!;
+        course.teacherId = '';
+        s.submissions = s.submissions.filter((sub) => sub.id !== job.targetId);
+      } else if (job.kind === 'course') {
         for (const sub of s.submissions.filter((sub) => sub.courseId === job.targetId))
           targetIds.add(sub.id);
         s.submissions = s.submissions.filter((sub) => sub.courseId !== job.targetId);

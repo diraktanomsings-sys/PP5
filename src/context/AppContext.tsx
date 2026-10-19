@@ -409,6 +409,12 @@ function useServerApp() {
         await refresh();
       }, 'กำลังลบข้อมูลและไฟล์ถาวร…'),
     driveStorage: snapshot?.drive,
+    organizeDrive: () =>
+      action(async () => {
+        for (const f of current.current?.drive?.unorganized || [])
+          await api('drive-organize', { id: f.id }, current.current?.role);
+        await refresh();
+      }, 'กำลังจัดไฟล์ใน Drive ตามภาคเรียน ชั้น และวิชา…'),
     verifyCredentials,
     logout,
     selectRole,

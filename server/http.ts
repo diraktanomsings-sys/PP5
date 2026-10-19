@@ -269,6 +269,12 @@ export function createHttp(
         res.json({ ok: true });
         return;
       }
+      if (action === 'drive-organize') {
+        requireThat(drive, 404, 'ไม่รองรับการเชื่อม Drive ในโหมดนี้');
+        await drive.organize(service, token(req), role(req), req.body.id);
+        res.json({ ok: true });
+        return;
+      }
       if (action === 'drive-migrate') {
         requireThat(drive, 404, 'ไม่รองรับการเชื่อม Drive ในโหมดนี้');
         await drive.migrate(service, token(req), role(req), req.body.id);
