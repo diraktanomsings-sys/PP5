@@ -1,5 +1,7 @@
 import React from 'react';
 import { TeacherDeleteSubmission } from './TeacherDeleteSubmission';
+import { RevisionNotices } from './RevisionNotices';
+import { teacherRevisionNotices } from '../../lib/revision-notices';
 import { useApp } from '../../context/AppContext';
 import { StatusBadge } from '../common/StatusBadge';
 import {
@@ -57,6 +59,13 @@ export const TeacherDashboard: React.FC = () => {
   const needsRevision = courseItems.filter(
     (item) => item.submission && item.submission.status === 'REJECTED_REVISION',
   ).length;
+  const revisionNotices = teacherRevisionNotices(
+    submissions,
+    courses,
+    users,
+    currentUser.id,
+    activeTerm.id,
+  );
   const finalLocked = courseItems.filter(
     (item) => item.submission && item.submission.status === 'FINAL_LOCKED',
   ).length;
@@ -157,50 +166,26 @@ export const TeacherDashboard: React.FC = () => {
         </div>
 
         <div className="space-y-2.5">
-          {needsRevision > 0 && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-start justify-between gap-3">
-              <div className="flex items-start gap-2.5">
-                <AlertTriangle className="w-4 h-4 text-rose-600 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-xs font-bold text-rose-900">
-                    ด่วน: วิชา ท13101 ภาษาไทย 3 (ป.3/1) ถูกส่งกลับแก้ไข
-                  </p>
-                  <p className="text-[11px] text-rose-700 mt-0.5">
-                    ผู้ตรวจ (ครูกิตติศักดิ์) แจ้งว่า:
-                    ความครบถ้วนของคะแนนและแบบประเมินคุณลักษณะอันพึงประสงค์ยังไม่ครบ
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  const rejectedSub = courseItems.find(
-                    (i) => i.submission?.status === 'REJECTED_REVISION',
-                  )?.submission;
-                  if (rejectedSub) {
-                    setSelectedSubmissionId(rejectedSub.id);
-                    setActiveView('teacher/detail');
-                  }
-                }}
-                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer"
-              >
-                ดูข้อบกพร่อง & อัปโหลด V002
-              </button>
-            </div>
-          )}
+          <RevisionNotices
+            notices={revisionNotices}
+            onOpen={(id) => {
+              setSelectedSubmissionId(id);
+              setActiveView('teacher/detail');
+            }}
+          />
 
           <div className="p-3 bg-blue-50/60 border border-blue-100 rounded-lg flex items-center justify-between text-xs text-blue-900">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-blue-600 shrink-0" />
               <span>
-                ยังเหลือรายวิชาที่ยังไม่ได้ส่งแบบสมบูรณ์: ตรวจสอบความถูกต้องของคะแนนเก็บและคุณลักษณะ
-                8 ประการก่อนส่ง
+                ก่อนส่งรายวิชาเพิ่มเติม: ตรวจสอบความถูกต้องของคะแนนเก็บและคุณลักษณะ 8 ประการก่อนส่ง
               </span>
             </div>
             <button
               onClick={() => setActiveView('teacher/submit')}
               className="text-blue-700 hover:text-blue-900 font-semibold underline text-xs"
             >
-              ส่งเล่มที่ค้าง
+              ส่งรายวิชาเพิ่มเติม
             </button>
           </div>
         </div>

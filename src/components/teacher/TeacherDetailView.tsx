@@ -96,6 +96,7 @@ export const TeacherDetailView: React.FC = () => {
   }
 
   const currentVer = submission.versions[0];
+  const feedbackReviewer = users.find((u) => u.id === currentVer?.reviewed_by);
   const nextVerNumber = `V${String(submission.current_version + 1).padStart(3, '0')}`;
   const cleanGrade = course.grade_level.replace('/', '-');
   const courseTerm = academicTerms.find((t) => t.id === course.term_id) || activeTerm;
@@ -233,7 +234,7 @@ export const TeacherDetailView: React.FC = () => {
                     ข้อเสนอแนะและจุดบกพร่องที่ต้องแก้ไขจากผู้ตรวจ ({currentVer.version_number})
                   </h4>
                   <span className="text-xs text-rose-600 font-mono">
-                    โดย: {reviewer?.full_name || 'ผู้ตรวจเอกสาร'}
+                    โดย: {feedbackReviewer?.full_name || 'ผู้ตรวจเอกสาร'}
                   </span>
                 </div>
 
