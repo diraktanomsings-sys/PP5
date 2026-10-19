@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client", "node"],
+    "strict": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
+  },
+  "include": [
+    "src/production",
+    "src/App.tsx",
+    "src/main.tsx",
+    "src/assets/schoolLogo.ts",
+    "api",
+    "server",
+    "tests",
+    "vite.config.ts"
+  ]
+}
