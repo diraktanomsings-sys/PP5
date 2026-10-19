@@ -3,6 +3,7 @@ import { createStore, postgresDatabase } from '../server/store.js';
 import { Service } from '../server/service.js';
 import { blobStorage } from '../server/storage.js';
 import { createHttp } from '../server/http.js';
+import { DriveBridge } from '../server/drive-bridge.js';
 
 let appPromise: Promise<ReturnType<typeof createHttp>> | undefined;
 function getApp() {
@@ -12,10 +13,12 @@ function getApp() {
     const origin = new URL(process.env.APP_URL).origin;
     if (!origin.startsWith('https://')) throw new Error('HttpsRequired');
     const store = await createStore(postgresDatabase(process.env.DATABASE_URL));
+    const drive = new DriveBridge(store, blobStorage());
     return createHttp(
       new Service(store, 'blob', process.env.PP5_SETUP_TOKEN || ''),
-      blobStorage(),
+      drive.storage(),
       origin,
+      drive,
     );
   })().catch((error) => {
     appPromise = undefined;
