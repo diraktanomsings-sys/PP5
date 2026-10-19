@@ -39,15 +39,16 @@ export function courseData(s: State, body: any): Omit<Course, 'id' | 'createdAt'
     400,
     'ไม่พบภาคเรียน',
   );
+  const teacherId = optional(body.teacherId);
   const teacher = s.users.find(
     (u) => u.id === body.teacherId && u.active && u.roles.includes('TEACHER'),
   );
-  requireThat(teacher, 400, 'กรุณาเลือกครูผู้สอนที่มีสิทธิ์');
+  requireThat(!teacherId || teacher, 400, 'ครูผู้สอนที่ระบุไม่มีสิทธิ์');
   const reviewerId = optional(body.reviewerId);
   if (reviewerId)
     requireThat(
       s.users.some((u) => u.id === reviewerId && u.active && u.roles.includes('REVIEWER')) &&
-        reviewerId !== teacher.id,
+        reviewerId !== teacherId,
       400,
       'ผู้ตรวจต้องมีสิทธิ์และเป็นคนละคนกับผู้สอน',
     );
@@ -69,7 +70,7 @@ export function courseData(s: State, body: any): Omit<Course, 'id' | 'createdAt'
     code: text(body.code, 'รหัสวิชา', 50),
     name: text(body.name, 'ชื่อวิชา'),
     grade: text(body.grade, 'ชั้น/ห้อง', 50),
-    teacherId: teacher.id,
+    teacherId,
     reviewerId,
     open: body.open !== false,
     department: optional(body.department),
@@ -161,10 +162,11 @@ export async function adminCommand(
         if (!remove)
           requireThat(
             s.terms.some((t) => t.id === c.termId && !t.deletedAt) &&
-              s.users.some(
-                (u) =>
-                  u.id === c.teacherId && !u.deletedAt && u.active && u.roles.includes('TEACHER'),
-              ) &&
+              (!c.teacherId ||
+                s.users.some(
+                  (u) =>
+                    u.id === c.teacherId && !u.deletedAt && u.active && u.roles.includes('TEACHER'),
+                )) &&
               (!c.reviewerId ||
                 s.users.some(
                   (u) =>

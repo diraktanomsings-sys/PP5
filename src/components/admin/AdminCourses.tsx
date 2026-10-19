@@ -41,13 +41,7 @@ export const AdminCourses: React.FC = () => {
   const [gradeLevel, setGradeLevel] = useState('ป.3/1');
   const [department, setDepartment] = useState('ภาษาไทย');
   const [creditHours, setCreditHours] = useState(3.0);
-  const [teacherId, setTeacherId] = useState(users[0]?.id || '');
   const [scoreRatio, setScoreRatio] = useState('70:30');
-
-  const teachers = users.filter((u) => {
-    const roles = u.assigned_roles && u.assigned_roles.length > 0 ? u.assigned_roles : [u.role];
-    return u.is_active && roles.includes('TEACHER');
-  });
 
   const filteredCourses = courses.filter((c) => {
     if (c.term_id !== activeTerm.id) return false;
@@ -72,7 +66,7 @@ export const AdminCourses: React.FC = () => {
       grade_level: gradeLevel,
       department: department,
       credit_hours: creditHours,
-      teacher_id: teacherId,
+      teacher_id: '',
       score_ratio: scoreRatio,
       is_open_submission: true,
       created_at: new Date().toISOString(),
@@ -129,7 +123,7 @@ export const AdminCourses: React.FC = () => {
             จัดการโครงสร้างรายวิชา (Courses Management)
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            กำหนดหลักสูตร, กลุ่มสาระการเรียนรู้, ครูผู้สอน และการเปิด-ปิดรับส่งไฟล์ ปพ.5
+            กำหนดหลักสูตร กลุ่มสาระการเรียนรู้ และการเปิด-ปิดรับส่งไฟล์ ปพ.5
           </p>
         </div>
 
@@ -209,7 +203,7 @@ export const AdminCourses: React.FC = () => {
                     </td>
                     <td className="px-4 py-3 text-slate-600">{c.department}</td>
                     <td className="px-4 py-3 text-slate-700">
-                      {teacher ? teacher.full_name : '-'}
+                      {teacher ? teacher.full_name : 'รอครูเลือกส่งงาน'}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <button
@@ -316,22 +310,10 @@ export const AdminCourses: React.FC = () => {
                 </select>
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  ครูผู้สอนประจำรายวิชา *
-                </label>
-                <select
-                  value={teacherId}
-                  onChange={(e) => setTeacherId(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-none"
-                >
-                  {teachers.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.full_name} ({t.department})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <p className="p-3 rounded-lg bg-blue-50 text-blue-900 border border-blue-100 leading-relaxed">
+                ครูเลือกวิชาเองตอนส่งงานได้ทุกกลุ่มสาระ ระบบจะระบุผู้ส่งหลังส่งงานสำเร็จ
+                โดยครูหนึ่งคนส่งได้หลายวิชา
+              </p>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
